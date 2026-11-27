@@ -13,8 +13,7 @@ import kotlinx.coroutines.withContext
 @Composable
 internal fun DemoLedgerScreen(drafts:List<Draft>,business:BusinessProfile,fiscalStore:FiscalSetupStore) {
     val context=LocalContext.current
-    val ledger=remember(context){DemoLedger(context.applicationContext)}
-    val outbox=remember(context){FiscalOutbox(context.applicationContext)}
+    val ledger=remember(context){RoomDemoLedger(context.applicationContext)}
     var queueStates by remember{mutableStateOf<Map<String,String>>(emptyMap())}
     val scope=rememberCoroutineScope()
     var setup by remember{mutableStateOf<FiscalSetup?>(null)}
@@ -28,7 +27,7 @@ internal fun DemoLedgerScreen(drafts:List<Draft>,business:BusinessProfile,fiscal
     LaunchedEffect(ledger){
         val result=withContext(Dispatchers.IO){runCatching{fiscalStore.read() to ledger.history().map{it to ledger.total(it)}}}
         result.onSuccess{setup=it.first;rows=it.second}.onFailure{message="Pohrana nije dostupna."}
-        queueStates=withContext(Dispatchers.IO){runCatching{rows.mapNotNull{(row,_)->outbox.status(row.id)?.let{row.id to it}}.toMap()}.getOrDefault(emptyMap())}
+        queueStates=withContext(Dispatchers.IO){runCatching{rows.mapNotNull{(row,_)->ledger.status(row.id)?.let{row.id to it}}.toMap()}.getOrDefault(emptyMap())}
         busy=false
     }
     Text("DEMO računi",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold)
@@ -54,8 +53,8 @@ internal fun DemoLedgerScreen(drafts:List<Draft>,business:BusinessProfile,fiscal
             busy=true
             scope.launch {
                 try{
-                    val result=withContext(Dispatchers.IO){runCatching{ledger.freeze(d,business,s,r,o);ledger.history().map{it to ledger.total(it)}}}
-                    result.onSuccess{rows=it;draft=null;message="DEMO snimka spremljena."}.onFailure{message="Spremanje nije potvrđeno. Ponovno otvorite zaslon."}
+                    val result=withContext(Dispatchers.IO){runCatching{ledger.freeze(d,business,s,r,o);val updated=ledger.history().map{it to ledger.total(it)};updated to updated.mapNotNull{(row,_)->ledger.status(row.id)?.let{row.id to it}}.toMap()}}
+                    result.onSuccess{rows=it.first;queueStates=it.second;draft=null;message="DEMO snimka spremljena."}.onFailure{message="Spremanje nije potvrđeno. Ponovno otvorite zaslon."}
                 }finally{busy=false}
             }
         }
@@ -66,15 +65,6 @@ internal fun DemoLedgerScreen(drafts:List<Draft>,business:BusinessProfile,fiscal
         Text(row.year.toString()+" · "+total+" EUR")
         Text("Nije fiskalizirano")
         val state=queueStates[row.id]
-        if(state==null) OutlinedButton(enabled=!busy,onClick={
-            busy=true
-            scope.launch {
-                try {
-                    val result=withContext(Dispatchers.IO){runCatching{outbox.prepare(row.id)}}
-                    result.onSuccess{queueStates=queueStates+(row.id to it);message="Lokalna priprema spremljena."}.onFailure{message="Lokalna priprema nije uspjela. Starije snimke bez autentificiranog broja nisu podržane."}
-                } finally {busy=false}
-            }
-        },modifier=Modifier.fillMaxWidth()){Text("Pripremi lokalni testni zahtjev")}
-        else Text(when(state){"QUEUED"->"Lokalno pripremljeno – nije poslano";"SENDING"->"Slanje nije potvrđeno";else->"Ishod nije potvrđen"})
+        Text(when(state){"QUEUED"->"Lokalno pripremljeno – nije poslano";"ARCHIVED"->"Arhivirana testna snimka";"SENDING"->"Slanje nije potvrđeno";"UNCERTAIN"->"Ishod nije potvrđen";else->"Status nije dostupan"})
     }}
 }

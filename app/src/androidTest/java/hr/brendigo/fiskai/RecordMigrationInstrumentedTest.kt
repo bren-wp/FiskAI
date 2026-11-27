@@ -32,11 +32,14 @@ class RecordMigrationInstrumentedTest {
             // Construct a v4-equivalent schema without the two v5 triggers.
             old.execSQL("DROP TRIGGER demo_receipt_no_replace")
             old.execSQL("DROP TRIGGER stock_event_no_replace")
+            old.execSQL("DROP TABLE fiscal_outbox")
+            old.execSQL("DROP TABLE fiscal_document")
+            old.execSQL("DROP TABLE fiscal_cutover")
             old.version=4
             db.close()
             db=RecordDatabase(context,name)
             val sql=db.writableDatabase
-            assertEquals(5,sql.version)
+            assertEquals(6,sql.version)
             assertEquals(encrypted,db.read(ns,"drafts"))
             assertEquals("[1]",SecureRecords(context,ns,db).getString("drafts","[]"))
             assertEquals(10000L,Inventory(context,db).balance()[product.id]!!)

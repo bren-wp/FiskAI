@@ -1,6 +1,7 @@
 # Promjene
 
 ## 0.1.1 — kandidat (nije objavljeno)
+- Objedinjena fizička SQLite/Room baza v6, migracija DEMO dokumenata i prethodnog outboxa, Room autoritet numeriranja na aktivnom DEMO zaslonu.
 - Offline XSD validator s provjerenim lokalnim SHA-256 manifestom i blokiranjem vanjskih ovisnosti; sintetički testovi, službeni ugovori još nisu uvezeni.
 - Room DAO atomska lokalna alokacija broja, dokumenta i outboxa s migracijskim pragom, idempotencijom i testovima rollbacka. Aktivni cutover nije uključen.
 - Prva Room integracija: lokalna priprema DEMO dokumenta i trajni outbox, transakcijski upis, jedinstveni identitet, CAS claim, UNCERTAIN oporavak i nepromjenjivost; bez mrežnog slanja.

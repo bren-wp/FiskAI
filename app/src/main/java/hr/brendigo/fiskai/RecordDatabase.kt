@@ -7,7 +7,7 @@ import android.database.sqlite.SQLiteOpenHelper
 
 /** Stores authenticated ciphertext only. No destructive schema fallback. */
 internal class RecordDatabase(context: Context, databaseName: String = "fiskai_records.db") :
-    SQLiteOpenHelper(context.applicationContext, databaseName, null, 5) {
+    SQLiteOpenHelper(context.applicationContext, databaseName, null, 6) {
 
     companion object {
         @Volatile private var instance: RecordDatabase? = null
@@ -23,14 +23,16 @@ internal class RecordDatabase(context: Context, databaseName: String = "fiskai_r
         createDemoLedger(db)
         createStock(db)
         protectImmutableInserts(db)
+        hr.brendigo.fiskai.room.FiscalSchema.createTables { db.execSQL(it) }
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        require(oldVersion in 1..4 && newVersion == 5)
+        require(oldVersion in 1..5 && newVersion == 6)
         if(oldVersion == 1) createCisJournal(db)
         if(oldVersion < 3) createDemoLedger(db)
         if(oldVersion < 4) createStock(db)
-        protectImmutableInserts(db)
+        if(oldVersion < 5) protectImmutableInserts(db)
+        hr.brendigo.fiskai.room.FiscalSchema.createTables { db.execSQL(it) }
     }
 
     // SQLite REPLACE can delete conflicting rows without firing DELETE triggers.

@@ -36,6 +36,8 @@ public abstract class FiscalQueueDao {
         insertQueue(row);
         return row;
     }
+    @Query("SELECT * FROM fiscal_document ORDER BY created DESC,id DESC LIMIT 100")
+    public abstract java.util.List<FiscalDocument> history();
     @Query("SELECT * FROM fiscal_document WHERE draftId=:draftId")
     public abstract FiscalDocument byDraft(String draftId);
     @Query("SELECT COALESCE(MAX(number),0) FROM fiscal_document WHERE year=:year AND premise=:premise AND registerNo=:register")
