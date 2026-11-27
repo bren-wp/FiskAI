@@ -97,7 +97,7 @@ final class CisEducDispatch {
             if($requireAnchor){
                 $ledger=new EducBusinessLedger($this->db);
                 foreach($ledger->verifySubject($subject,$storageKey) as $entry)
-                    if(($entry['document']['kind']??null)==='CREDIT')
+                    if(in_array($entry['document']['kind']??null,['CREDIT','PARTIAL_CREDIT'],true))
                         throw new LogicException('Credit reconciliation required before external dispatch.');
                 EducExternalCheckpoint::requireLatest($ledger->checkpoint($subject,$storageKey));
             }
