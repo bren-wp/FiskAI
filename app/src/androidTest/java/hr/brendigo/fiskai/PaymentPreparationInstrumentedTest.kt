@@ -131,4 +131,40 @@ class PaymentPreparationInstrumentedTest {
             assertTrue(url,runCatching{DemoSyncClient.endpoint(url)}.isFailure)
         }
     }
+    @Test fun durableSyncCheckpointRejectsRollbackAndConflict() {
+        if(!BuildConfig.DEMO_MODE)return
+        val ctx=InstrumentationRegistry.getInstrumentation().targetContext
+        val subject=UUID.randomUUID().toString()
+        val owner="12345678903"
+        val url="https://example.test/api.php"
+        val id=FiscalCutover.digest("DEMO_SYNC_V1\u0000"+DemoSyncClient.endpoint(url).toASCIIString()+"\u0000"+subject+"\u0000"+owner)
+        val file=java.io.File(ctx.noBackupFilesDir,"demo-sync/"+id+".checkpoint")
+        fun row()=JSONObject().put("eventId",UUID.randomUUID().toString())
+            .put("receiptId",FiscalCutover.digest(UUID.randomUUID().toString()))
+            .put("documentId",UUID.randomUUID().toString()).put("evidenceSha256",FiscalCutover.digest("test"))
+            .put("eventDate","2026-12-31").put("amountCents",1250)
+            .put("ruleVersion","HR-F2-2026-v1").put("deadlineDate","2027-01-20")
+        val first=row()
+        val remoteOnly=row()
+        try {
+            val remote=listOf(first,remoteOnly)
+            val snapshot=JSONObject().put("protocol",1).put("subjectId",subject)
+                .put("status","DEMO_METADATA_SNAPSHOT").put("events",org.json.JSONArray(remote))
+            val validated=DemoSyncClient.snapshot(subject,snapshot)
+            val local=JSONObject(first.toString()).put("environment","DEMO").put("kind","DEMO_PAYMENT_PREPARATION")
+            assertEquals(DemoSyncJournal.Result(1,1,2),DemoSyncJournal(ctx).reconcileAndSave(url,subject,owner,listOf(local),validated))
+            assertTrue(file.exists())
+            assertFalse(file.readText().contains(first.getString("eventId")))
+            assertEquals(DemoSyncJournal.Result(1,1,2),DemoSyncJournal(ctx).reconcileAndSave(url,subject,owner,listOf(local),validated))
+            assertTrue(runCatching{DemoSyncJournal(ctx).reconcileAndSave(url,subject,owner,listOf(local),listOf(first))}.isFailure)
+            val conflict=JSONObject(first.toString()).put("amountCents",1251)
+            assertTrue(runCatching{DemoSyncJournal(ctx).reconcileAndSave(url,subject,owner,listOf(local),listOf(conflict,remoteOnly))}.isFailure)
+            assertTrue(runCatching{DemoSyncClient.snapshot(UUID.randomUUID().toString(),snapshot)}.isFailure)
+            val duplicate=JSONObject(snapshot.toString()).put("events",org.json.JSONArray(listOf(first,first)))
+            assertTrue(runCatching{DemoSyncClient.snapshot(subject,duplicate)}.isFailure)
+            assertEquals(DemoSyncJournal.Result(1,1,2),DemoSyncJournal(ctx).reconcileAndSave(url,subject,owner,listOf(local),validated))
+            file.writeText("corrupted")
+            assertTrue(runCatching{DemoSyncJournal(ctx).reconcileAndSave(url,subject,owner,listOf(local),validated)}.isFailure)
+        }finally{android.util.AtomicFile(file).delete()}
+    }
 }
