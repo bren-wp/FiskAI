@@ -1,0 +1,21 @@
+name: Official CIS contract acquisition
+on:
+  pull_request:
+    paths: ['scripts/fetch-fiscal-contracts.py','.github/workflows/fiscal-contracts.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  acquire:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - run: python3 scripts/fetch-fiscal-contracts.py contract-review
+      - uses: actions/upload-artifact@v6
+        with:
+          name: FiskAI-official-contracts-unreviewed
+          path: contract-review/
+          if-no-files-found: error
