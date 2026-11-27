@@ -117,4 +117,39 @@ class WorkspaceBackupInstrumentedTest {
         SecureRecords.restoreWorkspace(target,exported.toString(),targetDb)
         assertTrue(DemoLedger(target,targetDb).history().isEmpty())
     }
+    @Test fun unifiedRoomCutoverAndV3Backup() {
+        val (source,sourceDb)=workspace("unified_source")
+        val (target,targetDb)=workspace("unified_target")
+        val sourceRoom=hr.brendigo.fiskai.room.FiscalRoomDatabase.open(source,sourceDb.databaseName)
+        val targetRoom=hr.brendigo.fiskai.room.FiscalRoomDatabase.open(target,targetDb.databaseName)
+        val register=Register("PP1","1","DEMO blagajna")
+        val operator=Operator("OP1","Test","12345678903")
+        val setup=FiscalSetup().withPremise(Premise("PP1","Test","Testna adresa")).withRegister(register).withOperator(operator)
+        val business=BusinessProfile(name="DEMO",oib="12345678903",address="Test",city="Test",vatRegistered=true)
+        fun draft()=Draft(kind="Račun",customer="DEMO",oib="",lines=listOf(Line("Test",java.math.BigDecimal.ONE,java.math.BigDecimal("10.00"),java.math.BigDecimal("25"))))
+        val old=draft()
+        val second=draft()
+        try {
+            assertEquals(1L,DemoLedger(source,sourceDb).freeze(old,business,setup,register,operator))
+            val ledger=RoomDemoLedger(source,sourceDb,sourceRoom,null)
+            assertEquals(1,ledger.history().size)
+            assertEquals("ARCHIVED",ledger.status(ledger.history().single().id))
+            assertTrue(runCatching{DemoLedger(source,sourceDb).freeze(draft(),business,setup,register,operator)}.isFailure)
+            assertEquals(2L,ledger.freeze(second,business,setup,register,operator))
+            assertEquals(2L,ledger.freeze(second,business,setup,register,operator))
+            val row=ledger.history().first{it.draftId==second.id}
+            val token=UUID.randomUUID().toString()
+            assertTrue(sourceRoom.queue().claim(row.id,token,System.currentTimeMillis()))
+            val exported=SecureRecords.exportWorkspace(source,sourceDb)
+            assertEquals(3,JSONObject(exported).getInt("version"))
+            SecureRecords.restoreWorkspace(target,exported,targetDb)
+            val restored=RoomDemoLedger(target,targetDb,targetRoom,null)
+            assertEquals(2,restored.history().size)
+            assertEquals("UNCERTAIN",restored.status(row.id))
+            assertEquals("12.50",restored.total(restored.history().first{it.id==row.id}))
+            assertEquals(3L,restored.freeze(draft(),business,setup,register,operator))
+            assertTrue(runCatching{SecureRecords.restoreWorkspace(target,exported,targetDb)}.isFailure)
+        } finally {sourceRoom.close();targetRoom.close()}
+    }
+
 }

@@ -16,6 +16,11 @@ internal class RecordDatabase(context: Context, databaseName: String = "fiskai_r
         }
     }
 
+    override fun onConfigure(db: SQLiteDatabase) {
+        super.onConfigure(db)
+        db.setForeignKeyConstraintsEnabled(true)
+    }
+
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE records (namespace TEXT NOT NULL, record_key TEXT NOT NULL, payload TEXT NOT NULL, PRIMARY KEY(namespace,record_key))")
         db.execSQL("CREATE TABLE legacy_migration (namespace TEXT NOT NULL, record_key TEXT NOT NULL, PRIMARY KEY(namespace,record_key))")

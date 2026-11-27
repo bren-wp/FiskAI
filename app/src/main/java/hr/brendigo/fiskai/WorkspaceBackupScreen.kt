@@ -30,6 +30,7 @@ internal fun WorkspaceBackupScreen(onBusy:(Boolean)->Unit,onRestored:()->Unit) {
             try {
                 val result=withContext(Dispatchers.IO) {
                     runCatching {
+                        FiscalCutover.ensure(context,RecordDatabase.shared(context))
                         val plain=SecureRecords.exportWorkspace(context).toByteArray(Charsets.UTF_8)
                         try {
                             val encrypted=PortableBackup.encrypt(plain,secret)
@@ -52,7 +53,10 @@ internal fun WorkspaceBackupScreen(onBusy:(Boolean)->Unit,onRestored:()->Unit) {
                     runCatching {
                         val file=context.contentResolver.openInputStream(uri)?.use(PortableBackup::readBounded) ?: error("Datoteka nije dostupna")
                         val plain=PortableBackup.decrypt(file,secret)
-                        try { SecureRecords.restoreWorkspace(context,plain.toString(Charsets.UTF_8)) } finally { plain.fill(0) }
+                        try {
+                            FiscalCutover.ensure(context,RecordDatabase.shared(context))
+                            SecureRecords.restoreWorkspace(context,plain.toString(Charsets.UTF_8))
+                        } finally { plain.fill(0) }
                     }
                 }
                 restored=result.isSuccess
@@ -64,7 +68,7 @@ internal fun WorkspaceBackupScreen(onBusy:(Boolean)->Unit,onRestored:()->Unit) {
     Text("Sigurnosna kopija radnog prostora",style=MaterialTheme.typography.headlineSmall)
     Panel {
         Text("Kopija obuhvaća nacrte, kupce, dobavljače, artikle, poslovni subjekt i fiskalne postavke.")
-        Text("Uključuje DEMO račune i brojače, stanje i povijest zaliha te CIS testni dnevnik. Certifikati, privatni ključevi i statusi lokalne Room pripreme nisu uključeni. Ne pokrećite istu obnovljenu kopiju na više uređaja.")
+        Text("Uključuje DEMO račune i brojače, stanje i povijest zaliha te CIS testni dnevnik. Uključuje i lokalne Room statuse zahtjeva. Certifikati i privatni ključevi nisu uključeni. Ne pokrećite istu obnovljenu kopiju na više uređaja.")
         Text("Vraćanje je moguće samo u prazan radni prostor iste vrste aplikacije (DEMO ili redovna). Postojeći podaci neće biti prepisani.")
         if(Build.VERSION.SDK_INT<26) {
             Text("Prijenosna kopija zahtijeva Android 8 ili noviji.")

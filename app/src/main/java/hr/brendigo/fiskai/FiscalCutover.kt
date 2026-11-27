@@ -87,6 +87,7 @@ internal object FiscalCutover {
         sql.execSQL("INSERT OR IGNORE INTO fiscal_cutover(id) VALUES(1)")
     }
     private fun queueValues(id:String,q:JSONObject?,created:Long):ContentValues {
+        if(q!=null)require(q.keys().asSequence().toSet()==setOf("state","created","updated","claimToken","reason"))
         val state=q?.getString("state")?:"ARCHIVED"
         val token=if(q==null||q.isNull("claimToken"))null else q.getString("claimToken")
         val reason=if(q==null||q.isNull("reason"))null else q.getString("reason")
@@ -96,6 +97,7 @@ internal object FiscalCutover {
             require(token!=null && java.util.UUID.fromString(token).toString()==token)
             if(state=="SENDING")require(reason==null) else require(reason in setOf("INTERRUPTED","TRANSPORT_ERROR","UNVERIFIED_RESPONSE"))
         }
+        if(q!=null)require(q.getLong("created")>0 && q.getLong("updated")>=q.getLong("created"))
         return ContentValues().apply{
             put("documentId",id);put("state",if(state=="SENDING")"UNCERTAIN" else state)
             put("created",q?.getLong("created")?:created);put("updated",if(state=="SENDING")System.currentTimeMillis() else q?.getLong("updated")?:created)

@@ -45,7 +45,9 @@ internal class SecureRecords(
             sql.beginTransaction()
             try {
                 val journals=LedgerBackup(context,database).export(sql)
-                val result=org.json.JSONObject().put("version",2).put("demo",BuildConfig.DEMO_MODE).put("records",records).put("journals",journals).toString()
+                val root=org.json.JSONObject().put("version",2).put("demo",BuildConfig.DEMO_MODE).put("records",records).put("journals",journals)
+                if(FiscalCutover.active(sql))root.put("version",3).put("roomOutbox",FiscalCutover.export(context,database,sql,journals))
+                val result=root.toString()
                 require(result.toByteArray(Charsets.UTF_8).size<=PortableBackup.MAX_PLAINTEXT)
                 sql.setTransactionSuccessful()
                 result
@@ -56,10 +58,12 @@ internal class SecureRecords(
         internal fun restoreWorkspace(context:Context,json:String,database:RecordDatabase=RecordDatabase.shared(context)) = synchronized(lock) {
             val root=org.json.JSONObject(json)
             val version=root.getInt("version")
-            require(version in 1..2 && root.getBoolean("demo")==BuildConfig.DEMO_MODE)
-            require(root.keys().asSequence().toSet()==if(version==1)setOf("version","demo","records") else setOf("version","demo","records","journals"))
+            require(version in 1..3 && root.getBoolean("demo")==BuildConfig.DEMO_MODE)
+            val expected=when(version){1->setOf("version","demo","records");2->setOf("version","demo","records","journals");else->setOf("version","demo","records","journals","roomOutbox")}
+            require(root.keys().asSequence().toSet()==expected)
+            val queues=if(version==3)root.getJSONObject("roomOutbox") else org.json.JSONObject()
             val ledger=LedgerBackup(context,database)
-            val journals=if(version==2)root.getJSONObject("journals").also(ledger::validate) else null
+            val journals=if(version>=2)root.getJSONObject("journals").also(ledger::validate) else null
             val payload=root.getJSONObject("records")
             require(payload.keys().asSequence().toSet()==backupRecords.map { it.id }.toSet())
             val incoming=backupRecords.map { item ->
@@ -80,7 +84,7 @@ internal class SecureRecords(
             val sql=database.writableDatabase
             sql.beginTransaction()
             try {
-                for(table in listOf("demo_receipt","demo_sequence","stock_event","stock_balance","cis_echo")) {
+                for(table in listOf("demo_receipt","demo_sequence","stock_event","stock_balance","cis_echo","fiscal_document","fiscal_outbox")) {
                     sql.rawQuery("SELECT 1 FROM "+table+" LIMIT 1",null).use { require(!it.moveToFirst()) }
                 }
                 // Refuse unknown records, including certificates, instead of overwriting them.
@@ -89,6 +93,7 @@ internal class SecureRecords(
                 }
                 for((item,encrypted) in sealed) database.write(item.namespace,item.name,encrypted)
                 if(journals!=null)ledger.restore(sql,journals)
+                if(version==3||FiscalCutover.active(sql))FiscalCutover.populate(context,database,sql,queues)
                 sql.setTransactionSuccessful()
             } finally { sql.endTransaction() }
         }

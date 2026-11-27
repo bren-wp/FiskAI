@@ -1,6 +1,7 @@
 # Promjene
 
 ## 0.1.1 — kandidat (nije objavljeno)
+- Backup sadržaj v3 uključuje kanonske Room dokumente i outbox; transakcijski restore u objedinjenu bazu, SENDING → UNCERTAIN, test migracije i nastavka broja.
 - Objedinjena fizička SQLite/Room baza v6, migracija DEMO dokumenata i prethodnog outboxa, Room autoritet numeriranja na aktivnom DEMO zaslonu.
 - Offline XSD validator s provjerenim lokalnim SHA-256 manifestom i blokiranjem vanjskih ovisnosti; sintetički testovi, službeni ugovori još nisu uvezeni.
 - Room DAO atomska lokalna alokacija broja, dokumenta i outboxa s migracijskim pragom, idempotencijom i testovima rollbacka. Aktivni cutover nije uključen.
