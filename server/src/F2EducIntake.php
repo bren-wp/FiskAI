@@ -38,7 +38,9 @@ final class F2EducIntake {
         string $schemaDir,array $schemaPins,string $entry,string $approvedSchemaDigest,
         string $kpdSourcePin,string $kpdCatalogPin,
         string $svrl,string $validationStatement,string $validationSignature,string $validatorPublic,string $validatorPin,string $validatorManifestPin,
-        string $grantStatement,string $grantSignature,string $grantPublic,string $grantPin):array {
+        string $grantStatement,string $grantSignature,string $grantPublic,string $grantPin,
+        ?string $hrSvrl=null,?string $hrManifestPin=null):array {
+        if(($hrSvrl===null)!==($hrManifestPin===null))throw new InvalidArgumentException('Incomplete dual evidence.');
         self::uuid($subject);self::uuid($id);
         if($this->db->inTransaction())throw new LogicException('Own transaction required.');
         $this->db->beginTransaction();
@@ -52,11 +54,14 @@ final class F2EducIntake {
             if(!hash_equals($approvedSchemaDigest,$review['schemaManifestSha256']))throw new DomainException('Unapproved XSD manifest.');
             $release=F2KpdRelease::verified($this->db,$review['issueDate'],$kpdSourcePin,$kpdCatalogPin);
             $codes=F2KpdRelease::checkLines($xml,$release);unset($release['codes']);
-            $validation=F2ValidationEvidence::verify($xml,$approvedSchemaDigest,$validatorManifestPin,$svrl,$validationStatement,$validationSignature,$validatorPublic,$validatorPin);
+            $validation=$hrSvrl===null
+                ? F2ValidationEvidence::verify($xml,$approvedSchemaDigest,$validatorManifestPin,$svrl,$validationStatement,$validationSignature,$validatorPublic,$validatorPin)
+                : F2ValidationEvidence::verifyDual($xml,$approvedSchemaDigest,$validatorManifestPin,$hrManifestPin,$svrl,$hrSvrl,$validationStatement,$validationSignature,$validatorPublic,$validatorPin);
             $grant=F2ProviderGrant::verify($grantStatement,$grantSignature,$grantPublic,$grantPin,$subject,$owner,$direction,$date);
             $e=['xml'=>$xml,'review'=>$review,'kpd'=>$release,'codes'=>$codes,'validation'=>$validation,'svrl'=>$svrl,
                 'validationStatement'=>$validationStatement,'validationSignature'=>base64_encode($validationSignature),
                 'grant'=>$grant,'grantStatement'=>$grantStatement,'grantSignature'=>base64_encode($grantSignature)];
+            if($hrSvrl!==null)$e['hrSvrl']=$hrSvrl;
             $plain=json_encode($e,JSON_THROW_ON_ERROR);
             if(strlen($plain)>4194304)throw new InvalidArgumentException('F2 evidence capacity exceeded.');
             $r=['subject_id'=>$subject,'document_id'=>$id,'direction'=>$direction,
