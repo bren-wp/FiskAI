@@ -34,12 +34,12 @@ internal object ReceiptRules {
     fun bank(owner:String,iban:String,ref:String,date:String,cents:Long,description:String):BankEvidence {
         require(validOib(owner)&&cents in -999999999999L..999999999999L&&cents!=0L)
         val a=account(iban);val n=text(ref,128)
-        return BankEvidence(FiscalCutover.digest("bank\u0000"+owner+"\u0000"+a+"\u0000"+n),owner,a,n,date(date),cents,text(description,512))
+        return BankEvidence(FiscalCutover.digest("bank\u0000"+owner+"\u0000"+a+"\u0000"+n),owner,a,n,ReceiptRules.date(date),cents,text(description,512))
     }
     fun cash(owner:String,ref:String,date:String,cents:Long,note:String):ReceiptEvidence {
         require(validOib(owner)&&cents in 1L..999999999999L)
         val n=text(ref,128)
-        return ReceiptEvidence(FiscalCutover.digest("cash\u0000"+owner+"\u0000"+n),owner,n,date(date),cents,"CASH",null,text(note,512))
+        return ReceiptEvidence(FiscalCutover.digest("cash\u0000"+owner+"\u0000"+n),owner,n,ReceiptRules.date(date),cents,"CASH",null,text(note,512))
     }
     fun fromBank(row:BankEvidence,note:String):ReceiptEvidence {
         require(row.cents>0)

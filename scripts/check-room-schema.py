@@ -16,6 +16,8 @@ for variant in variants:
     assert set(entities) == {"fiscal_document", "fiscal_outbox", "incoming_invoice", "bank_transaction", "receipt_event"}
     assert entities["fiscal_outbox"]["foreignKeys"], "Missing document reference"
     assert len(entities["fiscal_document"]["indices"]) == 2, "Missing uniqueness indices"
+    assert entities["receipt_event"]["foreignKeys"], "Missing bank transaction reference"
+    assert any(index["unique"] for index in entities["receipt_event"]["indices"]), "Missing bank receipt uniqueness"
     documents.append(document)
 assert all(document == documents[0] for document in documents), "Room schema differs across variants"
 print("All three Room schemas match.")
