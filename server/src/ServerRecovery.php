@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-/** Bounded logical archive of all application data tables in migrations 001–011.
+/** Bounded logical archive of all application data tables in migrations 001–012.
  * No SQL from archives is executed. Restore only to a freshly migrated isolated database.
  * Database accounts, external storage, keys, grants and physical binlogs are not included.
  */
@@ -12,12 +12,14 @@ final class ServerRecovery {
     private const TABLES=[
         'price_lists'=>['id'],'price_heads'=>['site_key','kind'],
         'kpd_catalog'=>['code','valid_from'],'kpd_source'=>['id'],
+        'f2_kpd_release'=>['revision'],'f2_kpd_code'=>['revision','code'],
         'fiscal_event_outbox'=>['environment','subject_id','event_id'],
         'demo_sync_subject'=>['subject_id'],'demo_sync_device'=>['device_id'],
         'demo_sync_payment'=>['subject_id','event_id'],'demo_sync_device_proof'=>['device_id'],
         'demo_document_scope'=>['subject_id'],'demo_sync_document'=>['subject_id','document_id'],
         'educ_business_subject'=>['subject_id'],'educ_business_document'=>['subject_id','document_id'],
         'educ_business_chain_head'=>['subject_id'],'educ_recovery_quarantine'=>['subject_id'],
+        'f2_educ_intake'=>['subject_id','document_id'],
         'cis_educ_response_evidence'=>['message_id'],'cis_educ_dispatch'=>['message_id'],
         'cis_educ_dispatch_audit'=>['message_id','event_type']
     ];
