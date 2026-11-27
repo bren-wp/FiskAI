@@ -17,6 +17,9 @@ class PaymentPreparationInstrumentedTest {
         val ctx=InstrumentationRegistry.getInstrumentation().targetContext
         val sourceName="payment-source-"+UUID.randomUUID()+".db"
         val targetName="payment-target-"+UUID.randomUUID()+".db"
+        val legacyName="payment-v4-"+UUID.randomUUID()+".db"
+        val legacy=RecordDatabase(ctx,legacyName)
+        val legacyRoom=FiscalRoomDatabase.open(ctx,legacyName)
         val source=RecordDatabase(ctx,sourceName)
         val target=RecordDatabase(ctx,targetName)
         val room=FiscalRoomDatabase.open(ctx,sourceName)
@@ -63,6 +66,10 @@ class PaymentPreparationInstrumentedTest {
             assertTrue(runCatching{receipts.prepareDemoPayment(full.id,second)}.isFailure)
             assertTrue(runCatching{source.writableDatabase.execSQL("UPDATE demo_payment_preparation SET payload='tampered'")}.isFailure)
             assertTrue(runCatching{source.writableDatabase.execSQL("INSERT OR REPLACE INTO demo_payment_preparation SELECT * FROM demo_payment_preparation")}.isFailure)
+            val legacyBackup=JSONObject(SecureRecords.exportWorkspace(ctx,source)).put("version",4)
+            SecureRecords.restoreWorkspace(ctx,legacyBackup.toString(),legacy)
+            assertEquals(event,ReceiptStore(ctx,legacy,legacyRoom).prepareDemoPayment(full.id,doc))
+            assertEquals(0L,ReceiptStore(ctx,legacy,legacyRoom).demoPaymentSelection(full.id).choices.single().remainingCents)
             assertTrue(runCatching{receipts.prepareDemoPayment(mismatch.id,doc)}.isFailure)
             assertEquals(second,receipts.demoPaymentSelection(mismatch.id).choices.single().id)
             val partialEvent=receipts.prepareDemoPayment(mismatch.id,second)
@@ -98,8 +105,8 @@ class PaymentPreparationInstrumentedTest {
             assertEquals(3,JSONObject(SecureRecords.exportWorkspace(ctx,target)).getJSONArray("paymentPreparations").length())
             assertTrue(runCatching{SecureRecords.restoreWorkspace(ctx,exported,target)}.isFailure)
         }finally{
-            room.close();targetRoom.close();source.close();target.close()
-            ctx.deleteDatabase(sourceName);ctx.deleteDatabase(targetName)
+            room.close();targetRoom.close();legacyRoom.close();source.close();target.close();legacy.close()
+            ctx.deleteDatabase(sourceName);ctx.deleteDatabase(targetName);ctx.deleteDatabase(legacyName)
         }
     }
 }
