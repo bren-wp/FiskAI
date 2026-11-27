@@ -127,7 +127,23 @@ $empty=(new EducAccountingPreview($db))->period($subject,'2026-11-28','2026-11-3
 ledgerCheck($empty['documents']===0&&$empty['totalCents']===0);
 $head=$ledger->checkpoint($subject,$storageKey);
 ledgerCheck($head['position']===10&&$head['subject']===$subject);
-echo "EDUC immutable business ledger, document chain and exact signed request binding passed.\n";
+$mergeKey=openssl_pkey_new(['private_key_type'=>OPENSSL_KEYTYPE_EC,'curve_name'=>'prime256v1']);
+$mergePublic=openssl_pkey_get_details($mergeKey)['key'];$mergePin=hash('sha256',$mergePublic);
+$import=$input;$import['documentId']='a2000000-0000-4000-8000-000000000013';$import['messageId']='a3000000-0000-4000-8000-000000000013';
+$import['issuedAt']='27.11.2026 14:00:00';$import['number']='9';
+$badImport=$import;$badImport['documentId']='a2000000-0000-4000-8000-000000000014';$badImport['messageId']='a3000000-0000-4000-8000-000000000014';$badImport['number']='11';
+$merge=function(array $documents)use($ledger,$subject,$head,$mergeKey,$mergePublic,$mergePin,$storageKey):array {
+    $statement=json_encode(['subject'=>$subject,'base'=>$head,'documents'=>$documents],JSON_THROW_ON_ERROR);
+    if(!openssl_sign("FISKAI-EDUC-MERGE-V1\n".$statement,$sig,$mergeKey,OPENSSL_ALGO_SHA256))throw new RuntimeException('Fixture signature failed.');
+    return $ledger->mergeSigned($subject,$statement,$sig,$mergePublic,$mergePin,$storageKey);
+};
+ledgerReject(DomainException::class,fn()=>$merge([$import,$badImport]));
+ledgerCheck($ledger->checkpoint($subject,$storageKey)===$head);
+ledgerReject(DomainException::class,fn()=>$ledger->read($subject,$import['documentId'],$storageKey));
+$merged=$merge([$import]);
+ledgerCheck($merged['checkpoint']['position']===11&&$merged['documents'][0]['document']['number']==='9');
+ledgerReject(DomainException::class,fn()=>$merge([$import]));
+echo "EDUC immutable business ledger, document chain, atomic signed merge and exact signed request binding passed.\n";
 
 if(getenv('FISKAI_CI_RECOVERY_TEST')==='1'){
     require_once __DIR__.'/../src/CisEducRecovery.php';
