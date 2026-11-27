@@ -36,6 +36,7 @@ class FiscalRoomInstrumentedTest {
             assertTrue(dao.claim(id,token,1L))
             assertFalse(dao.claim(id,UUID.randomUUID().toString(),2L))
             assertFalse(dao.markUncertain(id,UUID.randomUUID().toString(),"TRANSPORT_ERROR",3L))
+            assertTrue(runCatching{room.openHelper.writableDatabase.execSQL("UPDATE fiscal_outbox SET state='UNCERTAIN', reason=NULL")}.isFailure)
             room.close()
             room=FiscalRoomDatabase.open(ctx,name)
             assertEquals(1,room.queue().recoverInterrupted(4L))

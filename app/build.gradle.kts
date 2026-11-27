@@ -1,3 +1,8 @@
+import org.gradle.api.file.DirectoryProperty
+import org.gradle.api.tasks.OutputDirectory
+import org.gradle.api.tasks.compile.JavaCompile
+import org.gradle.process.CommandLineArgumentProvider
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
@@ -38,4 +43,20 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test:runner:1.7.0")
     androidTestImplementation("androidx.test.ext:junit:1.3.0")
+}
+
+abstract class RoomSchemaArguments : CommandLineArgumentProvider {
+    @get:OutputDirectory
+    abstract val schemaDirectory: DirectoryProperty
+    override fun asArguments(): Iterable<String> =
+        listOf("-Aroom.schemaLocation=" + schemaDirectory.get().asFile.absolutePath)
+}
+
+// Separate outputs per variant, no concurrent writes to the same schema file.
+tasks.withType<JavaCompile>().configureEach {
+    if (name in setOf("compileDebugJavaWithJavac", "compileDemoJavaWithJavac", "compileReleaseJavaWithJavac")) {
+        val schemaArgs = project.objects.newInstance(RoomSchemaArguments::class.java)
+        schemaArgs.schemaDirectory.set(project.layout.buildDirectory.dir("room-schemas/$name"))
+        options.compilerArgumentProviders.add(schemaArgs)
+    }
 }

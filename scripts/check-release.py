@@ -9,7 +9,7 @@ import zipfile
 REQUIRED = {
     "FiskAI.apk", "demo.apk", "FiskAI-unsigned.aab", "FiskAI-source.zip",
     "FiskAI-web.zip", "FiskAI-server.zip", "FiskAI-brending.zip",
-    "FiskAI-database.zip", "FiskAI-screenshots.zip", "FiskAI-android.cdx.json",
+    "FiskAI-database.zip", "FiskAI-screenshots.zip", "FiskAI-android.cdx.json", "FiskAI-room-schema.json",
     "INSTALLATION.md", "CHANGELOG.md", "THIRD_PARTY.md",
 }
 
