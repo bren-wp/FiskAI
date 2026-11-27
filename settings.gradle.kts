@@ -3,8 +3,9 @@ pluginManagement {
     resolutionStrategy {
         eachPlugin {
             if (requested.id.id == "org.jetbrains.kotlin.plugin.compose") {
-                val version = requireNotNull(requested.version)
-                useModule("org.jetbrains.kotlin:compose-compiler-gradle-plugin:$version")
+                requested.version?.let { version ->
+                    useModule("org.jetbrains.kotlin:compose-compiler-gradle-plugin:$version")
+                }
             }
         }
     }

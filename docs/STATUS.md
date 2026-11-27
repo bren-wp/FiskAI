@@ -1,7 +1,7 @@
-# Alpha06 acceptance status
+# Alpha07 acceptance status
 
-Added local PKCS#12 credential inspection: bounded file input, password handling, RSA key size and key/certificate match challenge, X.509 metadata, date validity and SHA-256 fingerprint. No private-key or password storage; no activation, no trust/issuer authorization or revocation checking yet. No production certificates should be used before acceptance.
+CI run 12: SDK setup successful; configuration failed with Required value was null. The previous resolution rule incorrectly required a version on all Compose plugin requests, including the versionless app request inherited from root. Now only explicit version requests are mapped; stack traces enabled for build diagnosis.
 
-CI run 10 installed API 37.1 successfully but failed resolving Kotlin Compose plugin marker 2.4.21. Map the plugin ID directly to the versioned Maven Central compose-compiler-gradle-plugin module; keep stable versions and fail on resolution errors. New CI pending.
+New source: optional encrypted local PKCS#12 test credential copy, password re-entry for inspection, fingerprint/expiry display, explicit replacement and logical deletion. The test label is a user instruction, not verified by certificate policy. No password saved; no trust/issuer/OIB/revocation verification, no production activation, no transport, no hardware-backed guarantee. No secure physical erasure guarantee. Keep original test certificate separately. Do not use production certificates yet.
 
-Remaining: actual device tests, real test certificate fixtures, trust and OIB validation, certificate vault, Room transactional storage, test CIS and eInvoice integrations, backup, web, real branding assets and visual acceptance. No production issuance or stable release.
+Pending: CI, instrumentation tests for vault, certificate fixtures, transactional database, device testing, real regulatory integration, backups, branding and web. No production issuance or stable release.

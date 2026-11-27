@@ -6,7 +6,7 @@ FiskAI je hrvatska poslovna platforma u razvoju. Nativna Android aplikacija omog
 
 PDF nacrte moguće je izvesti u odabranu mapu uređaja. Lokalni zapisi šifrirani su putem Android Keystorea. Postavke poslovnog subjekta, poslovnih prostora, naplatnih uređaja i operatera spremaju se na uređaju.
 
-Lokalna provjera PKCS#12 certifikata (.p12/.pfx) prikazuje valjanost, izdavatelja i otisak. Privatni ključ i lozinka se ne spremaju.
+Lokalna provjera PKCS#12 certifikata (.p12/.pfx) prikazuje valjanost, izdavatelja i otisak. Opcionalni lokalni sef testnih certifikata sprema šifriranu PKCS#12 kopiju; lozinka se nikada ne sprema. Sef nije produkcijski fiskalni potpisnik.
 
 ## Dostupnost
 
