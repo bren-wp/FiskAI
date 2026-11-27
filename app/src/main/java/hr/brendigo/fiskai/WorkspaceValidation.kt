@@ -10,6 +10,7 @@ internal object WorkspaceValidation {
         require(drafts.map { it.id }.distinct().size==drafts.size)
         require(contacts.map { it.id }.distinct().size==contacts.size)
         require(products.map { it.id }.distinct().size==products.size)
+        require(products.all{it.category.length<=80 && it.category.none{ch->ch.isISOControl()} && (it.unitCode.isEmpty()||it.unitCode in UblDraft.units)})
         for(draft in drafts) {
             require(draft.kind in setOf("Račun","Ponuda") && draft.customer.isNotBlank() && draft.lines.isNotEmpty())
             require(draft.oib.isBlank() || validOib(draft.oib))

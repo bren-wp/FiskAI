@@ -9,6 +9,8 @@ import android.database.sqlite.SQLiteOpenHelper
 internal class RecordDatabase(context: Context, databaseName: String = "fiskai_records.db") :
     SQLiteOpenHelper(context.applicationContext, databaseName, null, 6) {
 
+    init { setWriteAheadLoggingEnabled(true) }
+
     companion object {
         @Volatile private var instance: RecordDatabase? = null
         fun shared(context: Context): RecordDatabase = instance ?: synchronized(this) {

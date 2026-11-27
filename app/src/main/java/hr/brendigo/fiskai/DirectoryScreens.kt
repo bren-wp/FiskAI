@@ -1,6 +1,11 @@
 package hr.brendigo.fiskai
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -82,34 +87,96 @@ internal fun ContactScreen(supplier: Boolean, contacts: List<Contact>, onSave: (
 @Composable
 internal fun ProductScreen(products: List<Product>, onSave: (List<Product>) -> Boolean) {
     var query by remember { mutableStateOf("") }
-    var filter by remember { mutableStateOf("Svi") }
+    var filter by remember { mutableStateOf(CatalogKind.ALL) }
+    var category by remember { mutableStateOf<String?>(null) }
+    var vatFilter by remember { mutableStateOf<String?>(null) }
+    var sort by remember { mutableStateOf(CatalogSort.NAME_ASC) }
+    var filtersOpen by remember { mutableStateOf(false) }
+    var detail by remember { mutableStateOf<Product?>(null) }
     var editing by remember { mutableStateOf<Product?>(null) }
     var deleting by remember { mutableStateOf<Product?>(null) }
     var error by remember { mutableStateOf("") }
-    Text("Proizvodi i usluge", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        listOf("Svi", "Proizvodi", "Usluge").forEach { item -> FilterChip(selected = filter == item, onClick = { filter = item }, label = { Text(item) }) }
+    val blue=Color(0xFF005BEA)
+    val categories=ProductCatalog.categories(products)
+    val tabs=listOf("Svi artikli","Proizvodi","Usluge","Kategorije")
+    TabRow(selectedTabIndex=filter.ordinal,containerColor=Color.White,contentColor=blue) {
+        tabs.forEachIndexed { index,label ->
+            Tab(selected=filter.ordinal==index,onClick={filter=CatalogKind.entries[index];category=null},text={Text(label,fontSize=11.sp,maxLines=1,overflow=TextOverflow.Ellipsis)})
+        }
     }
-    OutlinedTextField(query, { query = it }, label = { Text("Pretraži proizvode i usluge") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-    Button(onClick = { editing = Product(name = "", code = "", price = BigDecimal.ZERO, vat = BigDecimal("25"), service = false); error = "" }, modifier = Modifier.fillMaxWidth()) { Text("+ Dodaj proizvod ili uslugu") }
-    val shown = products.filter { !it.archived && (filter == "Svi" || (filter == "Usluge") == it.service) && (it.name.contains(query, true) || it.code.contains(query, true) || it.kpd.contains(query)) }.sortedBy { it.name.lowercase() }
-    if(shown.isEmpty()) Text("Nema artikala.")
-    shown.forEach { product -> Panel {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) { Text(product.name, fontWeight = FontWeight.Bold); Text(product.code + " · " + if(product.service) "Usluga" else "Proizvod") }
-            Text(euro(product.price), fontWeight = FontWeight.Bold)
+    Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+        OutlinedTextField(query,{query=it},placeholder={Text("Pretraži proizvode ili usluge…")},singleLine=true,modifier=Modifier.weight(1f))
+        Box {
+            OutlinedButton(onClick={filtersOpen=true}){Text("Filtri")}
+            DropdownMenu(expanded=filtersOpen,onDismissRequest={filtersOpen=false}) {
+                DropdownMenuItem(text={Text("Sve stope PDV-a")},onClick={vatFilter=null;filtersOpen=false})
+                listOf("0","5","13","25").forEach{rate->DropdownMenuItem(text={Text("PDV $rate%")},onClick={vatFilter=rate;filtersOpen=false})}
+                DropdownMenuItem(text={Text("Ukloni filtre")},onClick={vatFilter=null;category=null;query="";filtersOpen=false})
+            }
         }
-        Text("PDV: " + product.vat.toPlainString() + "% · Cijena bez PDV-a")
-        Text("KPD 2025: " + product.kpd.ifEmpty{"Nije dodijeljena"})
-        product.retail?.let { r ->
-            Text("Maloprodajna cijena: "+euro(r.gross))
-            Text("Bazna cijena: "+(r.base?.let(::euro) ?: "Nije utvrđena"))
-            if(r.referenceDate.isNotEmpty()) Text("Referentni datum: "+r.referenceDate)
-            if(r.special) Text("Poseban oblik prodaje")
+    }
+    if(vatFilter!=null||category!=null)Text("Filtri: "+listOfNotNull(category,vatFilter?.let{"PDV $it%"}).joinToString(" · "),color=blue)
+    val shown=ProductCatalog.select(products,filter,query,category,vatFilter,sort)
+    Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+        Text("Ukupno: "+shown.size+" artikala",modifier=Modifier.weight(1f),fontSize=12.sp)
+        Box(Modifier.weight(1f)) {
+            val labels=listOf("Naziv (A – Ž)","Naziv (Ž – A)","Cijena ↑","Cijena ↓")
+            DirectoryPicker(labels[sort.ordinal],labels){sort=CatalogSort.entries[it]}
         }
-        if(product.priceHistory.isNotEmpty()) Text("Prethodni zapisi cijena: "+product.priceHistory.size)
-        Row { TextButton(onClick = { editing = product; error = "" }) { Text("Uredi") }; TextButton(onClick = { deleting = product; error = "" }) { Text("Obriši") } }
-    } }
+    }
+    if(filter==CatalogKind.CATEGORIES&&category==null) {
+        if(categories.isEmpty())Text("Još nema kategorija. Dodijelite kategoriju artiklu pri uređivanju.")
+        categories.filter{it.first.contains(query,true)}.forEach{(name,count)->
+            OutlinedButton(onClick={category=name;query=""},modifier=Modifier.fillMaxWidth()){Text("$name · $count")}
+        }
+    } else {
+        if(shown.isEmpty())Text("Nema odgovarajućih artikala.")
+        shown.forEach { product ->
+            var actions by remember(product.id){mutableStateOf(false)}
+            Row(Modifier.fillMaxWidth().background(Color.White).padding(vertical=10.dp,horizontal=6.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                Box(Modifier.size(44.dp).background(Color(0xFFE0EEFF),RoundedCornerShape(9.dp)),contentAlignment=Alignment.Center) {
+                    Text(if(product.service)"U" else "P",color=blue,fontWeight=FontWeight.Bold)
+                }
+                Column(Modifier.weight(1f)) {
+                    Text(product.name,fontWeight=FontWeight.Bold,maxLines=2,overflow=TextOverflow.Ellipsis)
+                    Text("Šifra: "+product.code,fontSize=12.sp,color=Color.DarkGray)
+                }
+                Column(horizontalAlignment=Alignment.End) {
+                    Text("PDV "+product.vat.stripTrailingZeros().toPlainString()+"%",color=blue,fontSize=11.sp,modifier=Modifier.background(Color(0xFFE0EEFF),RoundedCornerShape(5.dp)).padding(horizontal=5.dp,vertical=2.dp))
+                    Text(euro(product.price),fontWeight=FontWeight.Bold)
+                    Text(listOfNotNull("bez PDV-a",UblDraft.units[product.unitCode]).joinToString(" / "),fontSize=10.sp)
+                }
+                Box {
+                    IconButton(onClick={actions=true},modifier=Modifier.size(32.dp)){Text("⋮",fontSize=22.sp)}
+                    DropdownMenu(expanded=actions,onDismissRequest={actions=false}) {
+                        DropdownMenuItem(text={Text("Detalji")},onClick={actions=false;detail=product})
+                        DropdownMenuItem(text={Text("Uredi")},onClick={actions=false;editing=product;error=""})
+                        DropdownMenuItem(text={Text("Arhiviraj")},onClick={actions=false;deleting=product;error=""})
+                    }
+                }
+            }
+            HorizontalDivider(color=Color(0xFFE2E8F0))
+        }
+    }
+    Button(onClick={editing=Product(name="",code="",price=BigDecimal.ZERO,vat=BigDecimal("25"),service=filter==CatalogKind.SERVICES,category=category?.takeUnless{it=="Bez kategorije"}.orEmpty());error=""},modifier=Modifier.fillMaxWidth()){Text("+  Dodaj proizvod ili uslugu")}
+    detail?.let{product->
+        AlertDialog(onDismissRequest={detail=null},title={Text(product.name)},text={
+            Column {
+                Text("Šifra: "+product.code)
+                Text("Kategorija: "+product.category.ifEmpty{"Bez kategorije"})
+                Text("Jedinica mjere: "+(UblDraft.units[product.unitCode]?:"Nije dodijeljena"))
+                Text("KPD 2025: "+product.kpd.ifEmpty{"Nije dodijeljena"})
+                Text("Cijena bez PDV-a: "+euro(product.price))
+                product.retail?.let{r->
+                    Text("Maloprodajna cijena: "+euro(r.gross))
+                    Text("Bazna cijena: "+(r.base?.let(::euro)?:"Nije utvrđena"))
+                    if(r.referenceDate.isNotEmpty())Text("Referentni datum: "+r.referenceDate)
+                    if(r.special)Text("Poseban oblik prodaje")
+                }
+                Text("Prethodni zapisi cijena: "+product.priceHistory.size)
+            }
+        },confirmButton={TextButton(onClick={detail=null;editing=product;error=""}){Text("Uredi")}},dismissButton={TextButton(onClick={detail=null}){Text("Zatvori")}})
+    }
     if(error.isNotEmpty()) Text(error, color = MaterialTheme.colorScheme.error)
     editing?.let { product ->
         key(product.id) {
@@ -119,6 +186,8 @@ internal fun ProductScreen(products: List<Product>, onSave: (List<Product>) -> B
             var vat by remember { mutableStateOf(product.vat.toPlainString()) }
             var service by remember { mutableStateOf(product.service) }
             var kpd by remember { mutableStateOf(product.kpd) }
+            var categoryName by remember { mutableStateOf(product.category) }
+            var unit by remember { mutableStateOf(product.unitCode) }
             var gross by remember { mutableStateOf(product.retail?.gross?.toPlainString().orEmpty()) }
             var basePrice by remember { mutableStateOf(product.retail?.base?.toPlainString().orEmpty()) }
             var reference by remember { mutableStateOf(product.retail?.referenceDate.orEmpty()) }
@@ -128,6 +197,9 @@ internal fun ProductScreen(products: List<Product>, onSave: (List<Product>) -> B
                 Column(Modifier.heightIn(max=420.dp).verticalScroll(rememberScrollState()),verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     OutlinedTextField(name, { name = it }, label = { Text("Naziv") }, singleLine = true)
                     OutlinedTextField(code, { code = it }, label = { Text("Šifra") }, singleLine = true)
+                    OutlinedTextField(categoryName,{categoryName=it},label={Text("Kategorija")},singleLine=true)
+                    if(categories.isNotEmpty())DirectoryPicker("Postojeće kategorije",categories.map{it.first}){categoryName=categories[it].first.takeUnless{it=="Bez kategorije"}.orEmpty()}
+                    DirectoryPicker("Jedinica mjere: "+(UblDraft.units[unit]?:"Odaberi"),listOf("Nije dodijeljena")+UblDraft.units.values.toList()){unit=if(it==0)"" else UblDraft.units.keys.elementAt(it-1)}
                     OutlinedTextField(price, { price = it }, label = { Text("Cijena bez PDV-a (€)") }, singleLine = true)
                     DirectoryPicker("PDV: $vat%", listOf("0%", "5%", "13%", "25%")) { vat = listOf("0","5","13","25")[it] }
                     Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(checked = service, onCheckedChange = { service = it }); Text("Usluga") }
@@ -147,6 +219,7 @@ internal fun ProductScreen(products: List<Product>, onSave: (List<Product>) -> B
                 val retailResult=runCatching { parseRetail(gross,basePrice,reference,evidence,special) }
                 error = when {
                     n.isBlank() || n.length > 200 || c.isBlank() || c.length > 64 -> "Unesite naziv i šifru."
+                    categoryName.trim().length>80 || categoryName.any{it.isISOControl()} -> "Kategorija može sadržavati najviše 80 znakova."
                     kpd.isNotBlank() && normalizeKpd(kpd)==null -> "KPD mora imati šest znamenki."
                     retailResult.isFailure -> "Provjerite maloprodajnu i baznu cijenu, datum i dokaz."
                     products.any { it.id != product.id && it.code.equals(c, true) } -> "Šifra artikla već postoji."
@@ -154,15 +227,15 @@ internal fun ProductScreen(products: List<Product>, onSave: (List<Product>) -> B
                     else -> ""
                 }
                 if(error.isEmpty() && p != null) {
-                    if(onSave(products.filterNot { it.id == product.id } + product.withRetail(retailResult.getOrThrow()).copy(name = n, code = c, price = p, vat = BigDecimal(vat), service = service,kpd=normalizeKpd(kpd).orEmpty()))) editing = null else error = "Spremanje nije uspjelo."
+                    if(onSave(products.filterNot { it.id == product.id } + product.withRetail(retailResult.getOrThrow()).copy(name = n, code = c, price = p, vat = BigDecimal(vat), service = service,kpd=normalizeKpd(kpd).orEmpty(),category=categoryName.trim(),unitCode=unit))) editing = null else error = "Spremanje nije uspjelo."
                 }
             }) { Text("Spremi") } }, dismissButton = { TextButton(onClick = { editing = null; error = "" }) { Text("Odustani") } })
         }
     }
-    deleting?.let { product -> DeleteDialog(product.name, { deleting = null }) {
+    deleting?.let { product -> AlertDialog(onDismissRequest={deleting=null},title={Text("Arhivirati artikl?")},text={Text("Artikl „"+product.name+"” više neće biti ponuđen u novim dokumentima. Povijesni zapisi ostaju nepromijenjeni.")},dismissButton={TextButton(onClick={deleting=null}){Text("Odustani")}},confirmButton={TextButton(onClick={
         if(!onSave(products.map { if(it.id==product.id) it.copy(archived=true) else it })) error = "Arhiviranje nije uspjelo."
         deleting = null
-    } }
+    }){Text("Arhiviraj")}}) }
 }
 
 @Composable

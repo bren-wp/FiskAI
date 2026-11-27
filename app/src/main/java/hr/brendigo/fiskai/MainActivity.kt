@@ -247,7 +247,7 @@ private fun DraftForm(kind: String, saveError: String, contacts: List<Contact>, 
             Column(Modifier.weight(1f)) { Text(line.description); Text(euro(line.total)) }
             TextButton(onClick = { lines = lines.filterIndexed { i, _ -> i != index } }) { Text("Ukloni") }
         } }
-        if(products.isNotEmpty()) DirectoryPicker("Odaberi artikl", products.map { it.name }) { index -> val product = products[index]; description = product.name; price = product.price.toPlainString(); vat = product.vat.toPlainString(); kpd=product.kpd }
+        if(products.isNotEmpty()) DirectoryPicker("Odaberi artikl", products.map { it.name }) { index -> val product = products[index]; description = product.name; price = product.price.toPlainString(); vat = product.vat.toPlainString(); kpd=product.kpd;unitCode=product.unitCode }
         OutlinedTextField(description, { description = it }, label = { Text("Naziv proizvoda ili usluge") }, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(kpd,{kpd=it},label={Text("KPD 2025 (neobavezno za nacrt)")},modifier=Modifier.fillMaxWidth(),singleLine=true)
         DirectoryPicker("Jedinica mjere: "+(UblDraft.units[unitCode] ?: "Odaberi"),UblDraft.units.values.toList()){unitCode=UblDraft.units.keys.elementAt(it)}

@@ -1,6 +1,7 @@
 # Promjene
 
 ## 0.1.1 — kandidat (nije objavljeno)
+- Katalog proizvoda i usluga prema referenci 08: kategorije, pretraga, sortiranje, PDV filtar, kompaktni popis, izbornik stavke i jedinice mjere u katalogu, nacrtu i POS-u. Vizualna verifikacija još nije završena.
 - Backup sadržaj v3 uključuje kanonske Room dokumente i outbox; transakcijski restore u objedinjenu bazu, SENDING → UNCERTAIN, test migracije i nastavka broja.
 - Objedinjena fizička SQLite/Room baza v6, migracija DEMO dokumenata i prethodnog outboxa, Room autoritet numeriranja na aktivnom DEMO zaslonu.
 - Offline XSD validator s provjerenim lokalnim SHA-256 manifestom i blokiranjem vanjskih ovisnosti; sintetički testovi, službeni ugovori još nisu uvezeni.

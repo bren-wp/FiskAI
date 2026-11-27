@@ -13,7 +13,7 @@ internal fun PosDraftScreen(products:List<Product>,contacts:List<Contact>,save:(
     var query by remember{mutableStateOf("")}
     var customer by remember{mutableStateOf<Contact?>(null)}
     var message by remember{mutableStateOf("")}
-    val lines=products.mapNotNull{p->cart[p.id]?.let{q->Line(p.name,q,p.price,p.vat,p.kpd,"")}}
+    val lines=products.mapNotNull{p->cart[p.id]?.let{q->Line(p.name,q,p.price,p.vat,p.kpd,p.unitCode)}}
     Text("POS blagajna",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold)
     Panel{
         Text("Košarica za nacrt računa",fontWeight=FontWeight.Bold)
