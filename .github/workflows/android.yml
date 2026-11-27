@@ -21,7 +21,7 @@ jobs:
         with:
           packages: "platform-tools platforms;android-37.1 build-tools;36.0.0"
       - run: gradle --stacktrace :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:bundleDebug :app:assembleDemo :app:bundleRelease
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         with:
           name: FiskAI-build
           if-no-files-found: error

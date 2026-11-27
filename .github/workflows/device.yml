@@ -38,13 +38,13 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
           script: gradle --stacktrace :app:connectedDebugAndroidTest :app:assembleDebug && python3 scripts/capture-android.py
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         if: success()
         with:
           name: FiskAI-real-screenshots-api36
           if-no-files-found: error
           path: screenshots/actual/*.png
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: FiskAI-device-test-results
