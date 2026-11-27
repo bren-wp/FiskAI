@@ -11,7 +11,7 @@ final class F2InvoicePreflight {
     private const INV='urn:oasis:names:specification:ubl:schema:xsd:Invoice-2';
     private const CBC='urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2';
     private const CAC='urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2';
-    private const PROFILE='urn:cen.eu:en16931:2017#compliant#urn:mfin.gov.hr:cius-2025:1.0#conformant#urn:mfin.gov.hr:ext[1]2025:1.0';
+    private const PROFILE='urn:cen.eu:en16931:2017#compliant#urn:mfin.gov.hr:cius-2025:1.0#conformant#urn:mfin.gov.hr:ext-2025:1.0';
     private static function text(DOMXPath $xp,string $path,int $limit):string {
         $nodes=$xp->query($path);
         if($nodes===false||$nodes->length!==1)throw new InvalidArgumentException('Ambiguous invoice identity.');
