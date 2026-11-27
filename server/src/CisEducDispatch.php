@@ -90,10 +90,11 @@ final class CisEducDispatch {
         return $this->row($subject,$message)['state'];
     }
     /** Reserve for a controlled offline exercise only. No network operation is performed. */
-    public function reserve(string $subject,string $message,string $storageKey):array {
-        return $this->transaction(function()use($subject,$message,$storageKey){
+    public function reserve(string $subject,string $message,string $storageKey,bool $requireAnchor=false):array {
+        return $this->transaction(function()use($subject,$message,$storageKey,$requireAnchor){
             $r=$this->row($subject,$message,true);
             if($r['state']!=='PREPARED'||self::hasResponse($r))throw new DomainException('Already reserved or resolved.');
+            if($requireAnchor)EducExternalCheckpoint::requireLatest((new EducBusinessLedger($this->db))->checkpoint($subject,$storageKey));
             $soap=self::decrypt($r,$storageKey);$token=bin2hex(random_bytes(32));
             $s=$this->db->prepare("UPDATE cis_educ_dispatch SET state='RESERVED',reservation_sha256=?,reserved_at=UTC_TIMESTAMP(6),updated_at=UTC_TIMESTAMP(6) WHERE message_id=? AND subject_id=? AND state='PREPARED'");
             $s->execute([hash('sha256',$token),$message,$subject]);
@@ -137,8 +138,7 @@ final class CisEducDispatch {
             $entry['document']['messageId']!==$message||$entry['document']['ownerOib']!==getenv('FISKAI_CIS_EDUC_AUTHORIZED_OIB'))
             throw new DomainException('Dispatch document binding mismatch.');
         EducBusinessLedger::assertBound($entry['document'],self::decrypt($r,$storageKey),$signer);
-        EducExternalCheckpoint::requireLatest((new EducBusinessLedger($this->db))->checkpoint($subject,$storageKey));
-        $reserved=$this->reserve($subject,$message,$storageKey);
+        $reserved=$this->reserve($subject,$message,$storageKey,true);
         try{
             $soap=CisEducHttpsTransport::post($subject,$reserved['soap'],$signer,$trusted,$r['signer_sha256'],$r['trust_sha256']);
             return $this->verifyResponse($subject,$message,$reserved['reservation'],$soap,$trusted,$schemaDir,$storageKey);
