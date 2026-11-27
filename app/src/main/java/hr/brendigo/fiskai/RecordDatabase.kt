@@ -7,7 +7,7 @@ import android.database.sqlite.SQLiteOpenHelper
 
 /** Stores authenticated ciphertext only. No destructive schema fallback. */
 internal class RecordDatabase(context: Context, databaseName: String = "fiskai_records.db") :
-    SQLiteOpenHelper(context.applicationContext, databaseName, null, 4) {
+    SQLiteOpenHelper(context.applicationContext, databaseName, null, 5) {
 
     companion object {
         @Volatile private var instance: RecordDatabase? = null
@@ -22,13 +22,22 @@ internal class RecordDatabase(context: Context, databaseName: String = "fiskai_r
         createCisJournal(db)
         createDemoLedger(db)
         createStock(db)
+        protectImmutableInserts(db)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        require(oldVersion in 1..3 && newVersion == 4)
+        require(oldVersion in 1..4 && newVersion == 5)
         if(oldVersion == 1) createCisJournal(db)
         if(oldVersion < 3) createDemoLedger(db)
-        createStock(db)
+        if(oldVersion < 4) createStock(db)
+        protectImmutableInserts(db)
+    }
+
+    // SQLite REPLACE can delete conflicting rows without firing DELETE triggers.
+    // Abort the insert before conflict resolution, including INSERT OR REPLACE.
+    private fun protectImmutableInserts(db: SQLiteDatabase) {
+        db.execSQL("CREATE TRIGGER demo_receipt_no_replace BEFORE INSERT ON demo_receipt WHEN EXISTS(SELECT 1 FROM demo_receipt WHERE id=NEW.id OR draft_id=NEW.draft_id OR (year=NEW.year AND premise=NEW.premise AND register_no=NEW.register_no AND number=NEW.number)) BEGIN SELECT RAISE(ABORT,'Immutable test snapshot'); END")
+        db.execSQL("CREATE TRIGGER stock_event_no_replace BEFORE INSERT ON stock_event WHEN EXISTS(SELECT 1 FROM stock_event WHERE id=NEW.id) BEGIN SELECT RAISE(ABORT,'Immutable stock movement'); END")
     }
 
     private fun createCisJournal(db: SQLiteDatabase) {

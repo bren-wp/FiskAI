@@ -22,6 +22,8 @@ internal class SecureRecords(
         private const val ALIAS = "fiskai.local.records.v1"
         private const val PREFIX = "gcm1:"
         private val lock = Any()
+        // All operations needing both encryption and SQL acquire this lock before the transaction.
+        internal fun <T> withRecordLock(block:()->T):T = synchronized(lock,block)
         private data class BackupRecord(val namespace:String,val name:String,val empty:String) {
             val id get()="$namespace/$name"
         }

@@ -108,7 +108,7 @@ internal class LedgerBackup(context:Context, database:RecordDatabase) {
             require(created>0 && year==key.year && p.getString("environment")=="DEMO" &&
                 p.getString("draft")==draft && p.getLong("created")==created &&
                 p.getString("premise")==key.premise && p.getString("register")==key.register)
-            if(p.has("number"))require(p.getLong("number")==number)
+            if(p.has("number"))require(p.getLong("number")==number && p.getLong("year")==key.year)
         }
         for((key,last) in sequences)require(numbers[key]?.size?.toLong()==last) { "Sequence gap" }
         val balances=mutableMapOf<String,Long>()
@@ -126,7 +126,7 @@ internal class LedgerBackup(context:Context, database:RecordDatabase) {
             require(delta!=0L && next>=0 && next==strictLong(r,"quantity_after") && strictLong(r,"created")>0)
             val p=r.getJSONObject("payload")
             require(p.getString("productId")==product && p.getLong("delta")==delta)
-            if(p.has("quantityAfter"))require(p.getLong("quantityAfter")==next)
+            if(p.has("quantityAfter"))require(p.getLong("quantityAfter")==next && p.getLong("created")==strictLong(r,"created"))
             computed[product]=next
         }
         require(computed==balances) { "Stock balance mismatch" }

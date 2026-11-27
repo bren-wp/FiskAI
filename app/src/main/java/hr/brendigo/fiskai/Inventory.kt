@@ -20,32 +20,36 @@ internal class Inventory(context:Context,private val db:RecordDatabase=RecordDat
     fun balance():Map<String,Long> = db.readableDatabase.query("stock_balance",arrayOf("product_id","quantity"),null,null,null,null,null).use{c->
         buildMap{while(c.moveToNext())put(c.getString(0),c.getLong(1))}
     }
-    fun post(id:String,product:Product,quantity:BigDecimal,incoming:Boolean,reason:String):Long {
+    fun post(id:String,product:Product,quantity:BigDecimal,incoming:Boolean,reason:String):Long = SecureRecords.withRecordLock {
         UUID.fromString(id);UUID.fromString(product.id)
         require(!product.service&&!product.archived&&reason.isNotBlank()&&reason.length<=500)
         val amount=StockQuantity.encode(quantity)
         require(amount>0)
         val delta=if(incoming)amount else -amount
         val now=System.currentTimeMillis()
-        val snapshot=JSONObject().put("product",product.name).put("productId",product.id).put("delta",delta).put("reason",reason.trim()).toString()
-        val sealed=secure.sealSnapshot(id,snapshot)
         val sql=db.writableDatabase
         sql.beginTransaction()
         try{
-            sql.query("stock_event",arrayOf("product_id","delta","quantity_after"),"id=?",arrayOf(id),null,null,null).use{c->
+            sql.query("stock_event",arrayOf("product_id","delta","quantity_after","payload"),"id=?",arrayOf(id),null,null,null).use{c->
                 if(c.moveToFirst()){
                     require(c.getString(0)==product.id&&c.getLong(1)==delta)
-                    val after=c.getLong(2);sql.setTransactionSuccessful();return after
+                    val previous=JSONObject(secure.openSnapshot(id,c.getString(3)))
+                    require(previous.getString("productId")==product.id && previous.getLong("delta")==delta && previous.getString("reason")==reason.trim())
+                    val after=c.getLong(2)
+                    if(previous.has("quantityAfter"))require(previous.getLong("quantityAfter")==after)
+                    sql.setTransactionSuccessful();return@withRecordLock after
                 }
             }
             val old=sql.query("stock_balance",arrayOf("quantity"),"product_id=?",arrayOf(product.id),null,null,null).use{if(it.moveToFirst())it.getLong(0) else 0L}
             val next=Math.addExact(old,delta)
             require(next>=0L){"Insufficient stock"}
+            val snapshot=JSONObject().put("product",product.name).put("productId",product.id).put("delta",delta).put("reason",reason.trim()).put("quantityAfter",next).put("created",now)
+            val sealed=secure.sealSnapshot(id,snapshot.toString())
             val row=ContentValues().apply{put("product_id",product.id);put("quantity",next)}
             check(sql.insertWithOnConflict("stock_balance",null,row,android.database.sqlite.SQLiteDatabase.CONFLICT_REPLACE)!=-1L)
             val event=ContentValues().apply{put("id",id);put("product_id",product.id);put("delta",delta);put("quantity_after",next);put("created",now);put("payload",sealed)}
             sql.insertOrThrow("stock_event",null,event)
-            sql.setTransactionSuccessful();return next
+            sql.setTransactionSuccessful();next
         }finally{sql.endTransaction()}
     }
     fun history():List<StockEvent>{
@@ -57,6 +61,7 @@ internal class Inventory(context:Context,private val db:RecordDatabase=RecordDat
         return rows.map{r->
             val value=JSONObject(secure.openSnapshot(r.id,r.payload))
             require(value.getString("productId")==r.product&&value.getLong("delta")==r.delta)
+            if(value.has("quantityAfter"))require(value.getLong("quantityAfter")==r.after && value.getLong("created")==r.created)
             StockEvent(r.id,r.product,r.delta,r.after,r.created,value.getString("product"),value.getString("reason"))
         }
     }
