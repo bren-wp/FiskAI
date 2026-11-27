@@ -9,3 +9,7 @@ Radni KPR prikazuje potvrđene primitke po datumu i vrsti uplate; nije službeni
 ## DEMO povezivanje naplate
 
 U izoliranom DEMO paketu, zaslon Evidencija naplate omogućuje izričit odabir odgovarajućeg nepromjenjivog DEMO računa među posljednjih 100 nepovezanih dokumenata. Vlasnik, cijeli iznos i datum moraju se podudarati s uvjetima pripreme. Nakon povezivanja dijalog prikazuje postojeći račun. Ovaj postupak je lokalna priprema, ne stvarna fiskalizacija, eRačun, eIzvještavanje ili sinkronizacija sa serverom. Djelomične uplate, storno i produkcijski računi ostaju otvoreni. Backup v4 uključuje veze.
+
+## Djelomične naplate (Room v10)
+
+Jedan DEMO račun može imati više naplata. Odabir prikazuje preostali iznos; preplata, dvostruka dodjela istog primitka ili promjena identiteta odbijaju se. Pojedini potvrđeni primitak dodjeljuje se u cijelosti jednom računu; razdioba jednog primitka, korekcije, storno, server sync i produkcijsko eIzvještavanje nisu dovršeni. Novi backup sadržaj v5 čuva alokacije; v4 ostaje kompatibilan za pune naplate.
