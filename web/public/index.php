@@ -1,14 +1,3 @@
 <?php
 declare(strict_types=1);
-require_once __DIR__.'/../src/bootstrap.php';
-header("Content-Security-Policy: default-src 'self'; style-src 'self'; img-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
-header('X-Content-Type-Options: nosniff');
-$rows=[];$unavailable=false;
-try{$rows=db()->query("SELECT site_key,kind,version_no,filename,published_at,replaced_at FROM price_lists WHERE replaced_at IS NULL OR replaced_at>=UTC_TIMESTAMP()-INTERVAL 15 DAY ORDER BY site_key,kind,version_no DESC")->fetchAll();}catch(Throwable){$unavailable=true;}
-?><!doctype html><html lang="hr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="FiskAI – poslovni dokumenti, katalog i javni cjenici."><title>FiskAI | Poslovni dokumenti i cjenici</title><link rel="stylesheet" href="style.css"></head><body>
-<header><a class="brand" href="./">Fisk<span>AI</span></a><nav><a href="#mogucnosti">Mogućnosti</a><a href="#cjenici">Cjenici</a><a href="#kpd">KPD</a></nav></header>
-<main><section class="hero"><p class="eyebrow">POSLOVANJE NA JEDNOM MJESTU</p><h1>Računi. Ponude. Poslovanje.</h1><p>Organizirajte poslovne dokumente, kupce i katalog proizvoda i usluga uz FiskAI.</p><a class="button" href="#cjenici">Pregled cjenika</a></section>
-<section id="mogucnosti"><h2>Jednostavnija organizacija</h2><div class="grid"><article><h3>Računi i ponude</h3><p>Priprema nacrta i PDF dokumenata u Android aplikaciji.</p></article><article><h3>Poslovni katalog</h3><p>Evidencija artikala, KPD oznaka i prethodnih cijena.</p></article><article><h3>Javni cjenici</h3><p>Pregled aktualnih i arhivskih datoteka u CSV i XML formatu.</p></article></div></section>
-<section id="cjenici"><h2>Javni cjenici i arhiva</h2><?php if($unavailable):?><p>Cjenici trenutačno nisu dostupni.</p><?php elseif(!$rows):?><p>Nema objavljenih cjenika.</p><?php else:?><div class="grid"><?php foreach($rows as $row):$query=['action'=>'download','site'=>$row['site_key'],'kind'=>$row['kind']];if($row['replaced_at']!==null)$query['version']=$row['version_no'];?><article><h3><?=h($row['site_key'])?> · <?=h($row['kind'])?></h3><p><?= $row['replaced_at']===null?'Važeći cjenik':'Arhiva'?> · <?=h($row['filename'])?></p><a href="api.php?<?=h(http_build_query($query+['format'=>'csv']))?>">Otvori CSV</a> · <a href="api.php?<?=h(http_build_query($query+['format'=>'xml']))?>">Otvori XML</a></article><?php endforeach;?></div><?php endif;?></section>
-<section id="kpd"><h2>KPD 2025</h2><form action="api.php" method="get"><input type="hidden" name="action" value="kpd"><label for="q">Naziv ili šifra</label><input id="q" name="q" maxlength="160" required><button>Pretraži katalog (JSON)</button></form><p><a href="https://data.gov.hr/ckan/dataset/kpd-2025">Izvor: Državni zavod za statistiku</a></p></section>
-</main><footer>FiskAI · <a href="https://github.com/bren-wp/FiskAI">GitHub</a></footer></body></html>
+require __DIR__.'/../../server/src/PublicPage.php';
