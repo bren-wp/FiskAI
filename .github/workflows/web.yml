@@ -48,6 +48,7 @@ jobs:
       - run: php server/tests/FiscalEventOutboxTest.php
       - run: php server/tests/DemoSyncTest.php
       - run: php server/tests/DemoDeviceProofTest.php
+      - run: php server/tests/ServerRecoveryTest.php
       - run: python3 scripts/test-demo-sync-https.py
       - run: php server/tests/FiscalContractTest.php
       - run: php server/tests/FiscalSignatureTest.php
