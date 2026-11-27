@@ -44,7 +44,7 @@ class RecordMigrationInstrumentedTest {
             db.close()
             db=RecordDatabase(context,name)
             val sql=db.writableDatabase
-            assertEquals(9,sql.version)
+            assertEquals(10,sql.version)
             assertEquals(encrypted,db.read(ns,"drafts"))
             assertEquals("[1]",SecureRecords(context,ns,db).getString("drafts","[]"))
             assertEquals(10000L,Inventory(context,db).balance()[product.id]!!)
@@ -56,7 +56,7 @@ class RecordMigrationInstrumentedTest {
         } finally { db.close();context.deleteDatabase(name);context.getSharedPreferences(ns,0).edit().clear().commit() }
     }
 
-    @Test fun v8UpgradeRetainsConfirmedReceiptAndImmutableDocument() {
+    @Test fun v8UpgradeToV10RetainsConfirmedReceiptAndImmutableDocument() {
         val ctx=InstrumentationRegistry.getInstrumentation().targetContext
         val name="migration-v8-"+UUID.randomUUID()+".db"
         var db=RecordDatabase(ctx,name)
@@ -80,7 +80,7 @@ class RecordMigrationInstrumentedTest {
             sql.version=8
             db.close()
             db=RecordDatabase(ctx,name)
-            assertEquals(9,db.writableDatabase.version)
+            assertEquals(10,db.writableDatabase.version)
             room=hr.brendigo.fiskai.room.FiscalRoomDatabase.open(ctx,name)
             assertEquals(doc.snapshot,room.queue().document(doc.id).payload)
             assertEquals(cipher,room.receipts().receiptById(receipt.id).payload)
