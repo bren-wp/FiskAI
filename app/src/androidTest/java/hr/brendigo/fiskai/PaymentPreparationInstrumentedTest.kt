@@ -54,7 +54,12 @@ class PaymentPreparationInstrumentedTest {
             val full=receipts.read().receipts.single{it.reference=="TEST-1"}
             val mismatch=receipts.read().receipts.single{it.reference=="TEST-2"}
             assertTrue(runCatching{receipts.prepareDemoPayment(mismatch.id,doc)}.isFailure)
+            assertEquals(setOf(doc,second),receipts.demoPaymentSelection(full.id).choices.map{it.id}.toSet())
+            assertTrue(receipts.demoPaymentSelection(mismatch.id).choices.isEmpty())
             val event=receipts.prepareDemoPayment(full.id,doc)
+            val linked=receipts.demoPaymentSelection(full.id)
+            assertTrue(linked.linked)
+            assertEquals(doc,linked.choices.single().id)
             assertEquals(event,receipts.prepareDemoPayment(full.id,doc))
             assertTrue(runCatching{receipts.prepareDemoPayment(full.id,second)}.isFailure)
             assertTrue(runCatching{source.writableDatabase.execSQL("UPDATE demo_payment_preparation SET payload='tampered'")}.isFailure)
