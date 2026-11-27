@@ -1,0 +1,81 @@
+package hr.brendigo.fiskai
+
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
+import hr.brendigo.fiskai.room.FiscalDocument
+import hr.brendigo.fiskai.room.FiscalRoomDatabase
+import org.json.JSONObject
+import org.junit.Assert.*
+import org.junit.Test
+import org.junit.runner.RunWith
+import java.math.BigDecimal
+import java.util.UUID
+
+@RunWith(AndroidJUnit4::class)
+class PaymentPreparationInstrumentedTest {
+    @Test fun explicitDemoPaymentPreparationAndBackup() {
+        val ctx=InstrumentationRegistry.getInstrumentation().targetContext
+        val sourceName="payment-source-"+UUID.randomUUID()+".db"
+        val targetName="payment-target-"+UUID.randomUUID()+".db"
+        val source=RecordDatabase(ctx,sourceName)
+        val target=RecordDatabase(ctx,targetName)
+        val room=FiscalRoomDatabase.open(ctx,sourceName)
+        val targetRoom=FiscalRoomDatabase.open(ctx,targetName)
+        try {
+            if(!BuildConfig.DEMO_MODE) {
+                assertTrue(runCatching{PaymentPreparationStore.prepare(ctx,source,"invalid","invalid")}.isFailure)
+                return
+            }
+            FiscalCutover.ensure(ctx,source,null)
+            val business=BusinessProfile(name="DEMO",oib="12345678903",address="Test",city="Test",vatRegistered=true)
+            val register=Register("PP1","1","DEMO blagajna")
+            val operator=Operator("OP1","Test","12345678903")
+            val secure=SecureRecords(ctx,"fiskai_demo_receipts",source)
+            val date="2026-11-27"
+            val now=java.text.SimpleDateFormat("yyyy-MM-dd",java.util.Locale.ROOT).apply{
+                timeZone=java.util.TimeZone.getTimeZone("Europe/Zagreb")
+            }.parse(date)!!.time
+            fun issue():String {
+                val draft=Draft(kind="Račun",customer="DEMO",oib="",lines=listOf(Line("Test",BigDecimal.ONE,BigDecimal("10.00"),BigDecimal("25"))))
+                return room.queue().issueLocal(draft.id,2026,"PP1","1",0,now){number->
+                    val id=UUID.randomUUID().toString()
+                    val plain=demoSnapshot(draft,business,register,operator,now).put("number",number).put("year",2026).toString()
+                    FiscalDocument().apply {
+                        this.id=id;draftId=draft.id;year=2026;premise="PP1";registerNo="1"
+                        this.number=number;created=now;payload=secure.sealSnapshot(id,plain);digest=FiscalCutover.digest(plain)
+                    }
+                }.id
+            }
+            val doc=issue()
+            val second=issue()
+            val receipts=ReceiptStore(ctx,source,room)
+            assertTrue(receipts.cash(business,"TEST-1",date,"12.50","Sintetički dokaz"))
+            assertTrue(receipts.cash(business,"TEST-2",date,"1.00","Pogrešan iznos"))
+            val full=receipts.read().receipts.single{it.reference=="TEST-1"}
+            val mismatch=receipts.read().receipts.single{it.reference=="TEST-2"}
+            assertTrue(runCatching{receipts.prepareDemoPayment(mismatch.id,doc)}.isFailure)
+            val event=receipts.prepareDemoPayment(full.id,doc)
+            assertEquals(event,receipts.prepareDemoPayment(full.id,doc))
+            assertTrue(runCatching{receipts.prepareDemoPayment(full.id,second)}.isFailure)
+            assertTrue(runCatching{source.writableDatabase.execSQL("UPDATE demo_payment_preparation SET payload='tampered'")}.isFailure)
+            assertTrue(runCatching{source.writableDatabase.execSQL("INSERT OR REPLACE INTO demo_payment_preparation SELECT * FROM demo_payment_preparation")}.isFailure)
+            val exported=SecureRecords.exportWorkspace(ctx,source)
+            val root=JSONObject(exported)
+            assertEquals(4,root.getInt("version"))
+            val prepared=root.getJSONArray("paymentPreparations").getJSONObject(0)
+            assertEquals("2026-12-20",prepared.getString("deadlineDate"))
+            assertEquals(event,prepared.getString("eventId"))
+            val bad=JSONObject(exported)
+            bad.getJSONArray("paymentPreparations").getJSONObject(0).put("amountCents",999)
+            assertTrue(runCatching{SecureRecords.restoreWorkspace(ctx,bad.toString(),target)}.isFailure)
+            assertTrue(target.readableDatabase.rawQuery("SELECT 1 FROM fiscal_document",null).use{!it.moveToFirst()})
+            SecureRecords.restoreWorkspace(ctx,exported,target)
+            assertEquals(event,ReceiptStore(ctx,target,targetRoom).prepareDemoPayment(full.id,doc))
+            assertEquals(1,JSONObject(SecureRecords.exportWorkspace(ctx,target)).getJSONArray("paymentPreparations").length())
+            assertTrue(runCatching{SecureRecords.restoreWorkspace(ctx,exported,target)}.isFailure)
+        }finally{
+            room.close();targetRoom.close();source.close();target.close()
+            ctx.deleteDatabase(sourceName);ctx.deleteDatabase(targetName)
+        }
+    }
+}
