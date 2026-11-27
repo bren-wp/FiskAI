@@ -88,6 +88,27 @@ try{
     f2Reject(RuntimeException::class,fn()=>(new F2EducIntake($db,random_bytes(32)))->read($subject,$id));
     $s=$db->prepare('SELECT sealed_evidence FROM f2_educ_intake WHERE subject_id=?');$s->execute([$subject]);
     if(str_contains($s->fetchColumn(),'TEST-1'))throw new RuntimeException('Unencrypted intake.');
+    // Dual signed evidence uses synthetic SVRL fixtures here; actual rules run in the separate F2 CI.
+    $dualXml=str_replace('TEST-1','TEST-DUAL',$xml);
+    $hrReport=str_replace('context="Invoice"','context="Invoice-HR"',$svrl);
+    $hrManifest=hash('sha256','synthetic HR validator package');
+    $dualStatement=json_encode(['protocol'=>'FISKAI-F2-DUAL-SVRL-V2','documentSha256'=>hash('sha256',$dualXml),
+        'schemaManifestSha256'=>$schemaDigest,'enManifestSha256'=>$manifest,'hrManifestSha256'=>$hrManifest,
+        'enSvrlSha256'=>hash('sha256',$svrl),'hrSvrlSha256'=>hash('sha256',$hrReport)],JSON_THROW_ON_ERROR);
+    if(!openssl_sign("FISKAI-F2-DUAL-VALIDATION-V2\n".$dualStatement,$dualSig,$validatorKey,OPENSSL_ALGO_SHA256))
+        throw new RuntimeException('Fixture signing failed.');
+    $dualId='c2000000-0000-4000-8000-000000000003';
+    $dualPrepare=fn($hr,$pin)=>$intake->prepare($subject,$dualId,'ISSUED','2026-11-27',$dualXml,$history,'STANDARD_DOMESTIC_B2B',
+        $dir,$pins,'Invoice.xsd',$schemaDigest,$sourcePin,$pin26,$svrl,$dualStatement,$dualSig,$validatorPublic,$validatorPin,$manifest,$grant,$grantSig,$grantPublic,$grantPin,$hr,$pin);
+    f2Reject(InvalidArgumentException::class,fn()=>$dualPrepare(null,$hrManifest));
+    f2Reject(InvalidArgumentException::class,fn()=>$dualPrepare($svrl,$hrManifest));
+    f2Reject(DomainException::class,fn()=>$dualPrepare($hrReport.' ',$hrManifest));
+    f2Reject(DomainException::class,fn()=>$dualPrepare($hrReport,hash('sha256','other HR')));
+    $dualRecord=$dualPrepare($hrReport,$hrManifest);
+    $stored=$intake->read($subject,$dualId);
+    if($dualRecord['state']!=='REVIEW_REQUIRED'||$dualRecord['dispatchAuthorized']!==false||
+        $stored['svrl']!==$svrl||$stored['hrSvrl']!==$hrReport||$stored['validation']['status']!=='SIGNED_DUAL_SVRL_REVIEWED'||
+        $dualPrepare($hrReport,$hrManifest)!==$dualRecord)throw new RuntimeException('Dual evidence persistence mismatch.');
     echo "F2 intake synthetic evidence, date-versioned KPD, duplicate and encrypted recovery checks passed.\n";
     echo "F2 preflight with synthetic schema: identity, pinned XSD, historical rules and blocked dispatch passed.\n";
 }finally{unlink($dir.'/Invoice.xsd');rmdir($dir);}
