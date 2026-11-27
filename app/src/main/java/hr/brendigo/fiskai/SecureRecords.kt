@@ -52,7 +52,7 @@ internal class SecureRecords(
                 val root=org.json.JSONObject().put("version",2).put("demo",BuildConfig.DEMO_MODE).put("records",records).put("journals",journals)
                 if(FiscalCutover.active(sql))root.put("version",3).put("roomOutbox",FiscalCutover.export(context,database,sql,journals))
                 val payments=PaymentPreparationStore.export(context,database,sql)
-                if(payments.length()>0)root.put("version",4).put("paymentPreparations",payments)
+                if(payments.length()>0)root.put("version",5).put("paymentPreparations",payments)
                 val result=root.toString()
                 require(result.toByteArray(Charsets.UTF_8).size<=PortableBackup.MAX_PLAINTEXT)
                 sql.setTransactionSuccessful()
@@ -64,11 +64,11 @@ internal class SecureRecords(
         internal fun restoreWorkspace(context:Context,json:String,database:RecordDatabase=RecordDatabase.shared(context)) = synchronized(lock) {
             val root=org.json.JSONObject(json)
             val version=root.getInt("version")
-            require(version in 1..4 && root.getBoolean("demo")==BuildConfig.DEMO_MODE)
+            require(version in 1..5 && root.getBoolean("demo")==BuildConfig.DEMO_MODE)
             val expected=when(version){1->setOf("version","demo","records");2->setOf("version","demo","records","journals");3->setOf("version","demo","records","journals","roomOutbox");else->setOf("version","demo","records","journals","roomOutbox","paymentPreparations")}
             require(root.keys().asSequence().toSet()==expected)
             val queues=if(version>=3)root.getJSONObject("roomOutbox") else org.json.JSONObject()
-            val payments=if(version==4)root.getJSONArray("paymentPreparations").also{require(BuildConfig.DEMO_MODE && it.length() in 1..ReceiptRules.MAX_ROWS)} else null
+            val payments=if(version>=4)root.getJSONArray("paymentPreparations").also{require(BuildConfig.DEMO_MODE && it.length() in 1..ReceiptRules.MAX_ROWS)} else null
             val ledger=LedgerBackup(context,database)
             val journals=if(version>=2)root.getJSONObject("journals").also(ledger::validate) else null
             val payload=root.getJSONObject("records")
@@ -110,7 +110,7 @@ internal class SecureRecords(
                 ReceiptStore.restore(context,database,sql,payload.getJSONArray(ReceiptStore.BANK),payload.getJSONArray(ReceiptStore.EVENTS))
                 if(journals!=null)ledger.restore(sql,journals)
                 if(version>=3||FiscalCutover.active(sql))FiscalCutover.populate(context,database,sql,queues)
-                if(payments!=null)PaymentPreparationStore.restore(context,database,sql,payments)
+                if(payments!=null)PaymentPreparationStore.restore(context,database,sql,payments,legacyFull=version==4)
                 sql.setTransactionSuccessful()
             } finally { sql.endTransaction() }
         }
