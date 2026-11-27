@@ -37,6 +37,10 @@ final class CisEducRecovery {
             $select=implode(',',array_map(fn($c)=>'t.'.$c,$columns));
             $sql="SELECT $select FROM $table t JOIN cis_educ_dispatch d ON d.message_id=t.message_id WHERE d.subject_id=? ORDER BY t.message_id";
             if($table==='cis_educ_dispatch_audit')$sql.=',t.event_type';
+            $sizeExpr=implode('+',array_map(fn($c)=>"COALESCE(OCTET_LENGTH(t.$c),0)",$columns));
+            $size=$this->db->prepare("SELECT COUNT(*) AS n,COALESCE(SUM($sizeExpr),0) AS bytes FROM $table t JOIN cis_educ_dispatch d ON d.message_id=t.message_id WHERE d.subject_id=?");
+            $size->execute([$subject]);$bounds=$size->fetch(PDO::FETCH_ASSOC);
+            if((int)$bounds['n']>5000||(int)$bounds['bytes']>self::MAX-$bytes)throw new RuntimeException('Archive capacity exceeded.');
             $s=$this->db->prepare($sql.' LIMIT 5001');$s->execute([$subject]);
             $rows=[];
             while($row=$s->fetch(PDO::FETCH_ASSOC)){
