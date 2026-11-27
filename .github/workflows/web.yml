@@ -41,6 +41,7 @@ jobs:
       - run: php server/tests/LegalComplianceTest.php
       - run: php server/tests/TaxStatusHistoryTest.php
       - run: php server/tests/FiscalReportingRulesTest.php
+      - run: php server/tests/F2ProviderGrantTest.php
       - run: php server/tests/PriceListsTest.php
       - run: php server/tests/PriceDownloadTest.php
       - run: php server/tests/DatabaseTest.php
