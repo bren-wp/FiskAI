@@ -1,6 +1,7 @@
 # Promjene
 
 ## 0.1.1 — kandidat (nije objavljeno)
+- Obvezan UPGRADE.md, nedestruktivne upute za Android i server, stroža kontrola sigurnosti ZIP zapisa i oba SHA-256 manifesta originalnog brendinga, regresijski testovi kontrole objave.
 - Ispravljeno automatsko snimanje kataloga: usklađen naziv gumba, selektori normaliziraju razmake bez djelomičnih podudaranja, provjerava se otvaranje novog artikla, dodani regresijski testovi selektora i dijagnostika neuspjele snimke.
 - Stroga provjera XML referenci i deklaracije prije DOM parsiranja; odbijanje nepoznatih entiteta, nedopuštenih Unicode referenci i processing instructions. Instrumentacijski testovi sada identificiraju pojedinačni neispravan ulaz; dodani JVM regresijski testovi.
 - Ispravljen Android DOM parser koji ne podržava SAX external-general-entities; zajednički ograničeni UTF-8 parser za UBL i CIS Echo, zabrana DTD/vanjskih entiteta, testovi na emulatoru.

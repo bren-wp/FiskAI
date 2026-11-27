@@ -1,0 +1,18 @@
+{
+  "source": "https://narodne-novine.nn.hr/clanci/sluzbeni/2025_06_89_1233.html",
+  "scope": "STANDARD_DOMESTIC_B2B",
+  "rules": [
+    {
+      "year": 2026,
+      "version": "HR-F2-2026-v1",
+      "vatIssue": true,
+      "nonVatIssue": false
+    },
+    {
+      "year": 2027,
+      "version": "HR-F2-2027-v1",
+      "vatIssue": true,
+      "nonVatIssue": true
+    }
+  ]
+}
