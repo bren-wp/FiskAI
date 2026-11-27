@@ -96,6 +96,11 @@ final class EducBusinessLedger {
             throw new RuntimeException('Chain head authentication failed.');
         return $result;
     }
+    /** Consistent full-chain verification inside the caller's recovery transaction. */
+    public function verifySubject(string $subject,string $storageKey):array {
+        if(!$this->db->inTransaction())throw new LogicException('Recovery transaction required.');
+        return $this->checkedRows($this->subject($subject,true),$storageKey);
+    }
     public function read(string $subject,string $document,string $storageKey):array {
         self::uuid($document);
         $own=!$this->db->inTransaction();
