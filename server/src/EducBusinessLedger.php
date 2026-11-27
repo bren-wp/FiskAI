@@ -168,7 +168,9 @@ final class EducBusinessLedger {
         $xp=new DOMXPath($doc);$xp->registerNamespace('s','http://schemas.xmlsoap.org/soap/envelope/');$xp->registerNamespace('f',self::NS);
         $xp->registerNamespace('ds','http://www.w3.org/2000/09/xmldsig#');
         $root=$xp->query('/s:Envelope/s:Body/f:RacunZahtjev');
-        if($root->length!==1)throw new DomainException('Missing request.');
+        if($root->length!==1||$xp->query('/s:Envelope/*')->length!==1||$xp->query('/s:Envelope/s:Body/*')->length!==1||
+            $xp->query('//ds:Signature')->length!==1||$xp->query('//@*[local-name()="Id" or local-name()="ID" or local-name()="id"]')->length!==1)
+            throw new DomainException('Ambiguous SOAP request.');
         $node=$root->item(0);
         $zki=$xp->query('f:Racun/f:ZastKod',$node);
         $sig=$xp->query('ds:Signature',$node);
@@ -176,7 +178,12 @@ final class EducBusinessLedger {
         $signature=$sig->item(0);
         $si=$xp->query('ds:SignedInfo',$signature);$sv=$xp->query('ds:SignatureValue',$signature);
         $dig=$xp->query('ds:SignedInfo/ds:Reference/ds:DigestValue',$signature);
-        if($si->length!==1||$sv->length!==1||$dig->length!==1)throw new DomainException('Invalid proof.');
+        if($si->length!==1||$sv->length!==1||$dig->length!==1||
+            $xp->evaluate('string(ds:SignedInfo/ds:CanonicalizationMethod/@Algorithm)',$signature)!=='http://www.w3.org/2001/10/xml-exc-c14n#'||
+            $xp->evaluate('string(ds:SignedInfo/ds:SignatureMethod/@Algorithm)',$signature)!=='http://www.w3.org/2001/04/xmldsig-more#rsa-sha256'||
+            $xp->evaluate('string(ds:SignedInfo/ds:Reference/@URI)',$signature)!=='#RacunZahtjev'||
+            $xp->evaluate('string(ds:SignedInfo/ds:Reference/ds:DigestMethod/@Algorithm)',$signature)!=='http://www.w3.org/2001/04/xmlenc#sha256')
+            throw new DomainException('Invalid proof.');
         $public=openssl_pkey_get_public($cert);
         $bytes=base64_decode($sv->item(0)->textContent,true);
         $canonical=$si->item(0)->C14N(true,false);
