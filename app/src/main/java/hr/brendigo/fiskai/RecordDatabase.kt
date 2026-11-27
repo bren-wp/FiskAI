@@ -7,7 +7,7 @@ import android.database.sqlite.SQLiteOpenHelper
 
 /** Stores authenticated ciphertext only. No destructive schema fallback. */
 internal class RecordDatabase(context: Context, databaseName: String = "fiskai_records.db") :
-    SQLiteOpenHelper(context.applicationContext, databaseName, null, 1) {
+    SQLiteOpenHelper(context.applicationContext, databaseName, null, 2) {
 
     companion object {
         @Volatile private var instance: RecordDatabase? = null
@@ -19,10 +19,16 @@ internal class RecordDatabase(context: Context, databaseName: String = "fiskai_r
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE records (namespace TEXT NOT NULL, record_key TEXT NOT NULL, payload TEXT NOT NULL, PRIMARY KEY(namespace,record_key))")
         db.execSQL("CREATE TABLE legacy_migration (namespace TEXT NOT NULL, record_key TEXT NOT NULL, PRIMARY KEY(namespace,record_key))")
+        createCisJournal(db)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        error("Unsupported schema upgrade from " + oldVersion + " to " + newVersion)
+        if(oldVersion == 1 && newVersion == 2) createCisJournal(db)
+        else error("Unsupported schema upgrade from " + oldVersion + " to " + newVersion)
+    }
+
+    private fun createCisJournal(db: SQLiteDatabase) {
+        db.execSQL("CREATE TABLE cis_echo (id TEXT PRIMARY KEY NOT NULL, created INTEGER NOT NULL, state TEXT NOT NULL CHECK(state IN ('QUEUED','SENDING','VERIFIED','UNCERTAIN')), completed INTEGER, outcome TEXT)")
     }
 
     private fun values(namespace: String, key: String) = ContentValues().apply {

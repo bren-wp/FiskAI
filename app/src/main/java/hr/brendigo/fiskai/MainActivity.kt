@@ -152,13 +152,14 @@ private fun FiskApp(store: DraftStore, directory: DirectoryStore, businessStore:
                     directory.saveProducts(next).also { if(it) products = next }
                 }
                 page == "Poslovni prostori" || page == "Naplatni uređaji" || page == "Operateri" -> FiscalSetupScreen(page, fiscalStore)
+                page == "Test fiskalizacije" -> CisTestScreen()
                 page == "Certifikati" -> CertificateScreen(business.oib)
                 page == "Poslovni subjekt" -> BusinessScreen(business) { next ->
                     businessStore.save(next).also { if(it) business = next }
                 }
                 else -> {
                     Text("Više", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    listOf("Kupci", "Dobavljači", "Proizvodi i usluge", "Poslovni subjekt", "Poslovni prostori", "Naplatni uređaji", "Operateri", "Certifikati").forEach { destination ->
+                    listOf("Kupci", "Dobavljači", "Proizvodi i usluge", "Poslovni subjekt", "Poslovni prostori", "Naplatni uređaji", "Operateri", "Certifikati", "Test fiskalizacije").forEach { destination ->
                         OutlinedButton(onClick = { page = destination }, modifier = Modifier.fillMaxWidth()) { Text(destination) }
                     }
                     Panel { Text("Lokalna pohrana"); Text("Lokalni zapisi zaštićeni su ključem ovog uređaja. Fiskalizacija i eRačuni još nisu dostupni.") }

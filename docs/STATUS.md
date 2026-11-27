@@ -1,7 +1,3 @@
-# Alpha08 acceptance status
+# Alpha09 acceptance status
 
-Previous alpha07 Gradle CI run 14 passed the unit test, lint, assembleDebug and bundleDebug invocation. Artifact publication status must be checked separately. No dependency downgrade.
-
-New source: SQLite transactional encrypted-record storage, idempotent per-key migration and post-commit legacy cleanup, fail-closed read/write and Android instrumentation tests. Uses framework SQLite intentionally, not Room yet. New build and instrumented tests pending. No production issuance or stable release.
-
-Remaining: normalized Room schema, cross-module transactions, backup/restore, async writes, trust validation, real CIS/eInvoice integration, real branding assets and visual acceptance, web and backend.
+Added real test-only CIS Echo transport, durable diagnostic journal, atomic claim, conservative interrupted-request recovery, schema 1 to 2 migration, Croatian screen and parser/state tests. No live endpoint result verified. No actual invoice submission or fiscal receipt issuance. SOAPAction contract and device TLS/parser compatibility require verification. Prior alpha08 CI checked independently; new build and instrumentation pending. Normalized Room, transaction-safe invoice numbering, test certificate trust, XMLDSig, ZKI/JIR, eInvoice integrations, backup, web and visual acceptance remain outstanding.

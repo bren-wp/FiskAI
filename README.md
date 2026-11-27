@@ -10,6 +10,8 @@ Lokalna provjera PKCS#12 certifikata (.p12/.pfx) prikazuje valjanost, izdavatelj
 
 Poslovni zapisi koriste transakcijsku SQLite pohranu s AES-GCM šifriranjem sadržaja i migracijom postojećih lokalnih zapisa. Lokalna pohrana nije zamjena za sigurnosnu kopiju.
 
+Test fiskalizacije provjerava dostupnost službenog CIS testnog servisa operacijom Echo. Ne šalje račune ni osobne podatke, ne stvara JIR i ne potvrđuje poreznu usklađenost.
+
 ## Dostupnost
 
 Trenutačno: razvojna verzija. Nacrti nisu izdani porezni dokumenti. Fiskalizacija, eRačuni, eIzvještavanje i sinkronizacija još nisu aktivirani.
