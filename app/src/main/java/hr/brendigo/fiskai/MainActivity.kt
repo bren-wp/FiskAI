@@ -88,6 +88,25 @@ private fun FiskApp(store: DraftStore, directory: DirectoryStore, businessStore:
             }
         }
     }
+    var ublTarget by remember { mutableStateOf<Pair<Draft,BusinessProfile>?>(null) }
+    val ublPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/xml")) { uri ->
+        val target=ublTarget
+        ublTarget=null
+        if(uri!=null && target!=null){
+            exporting=true
+            scope.launch {
+                try {
+                    val result=withContext(Dispatchers.IO){
+                        runCatching {
+                            val bytes=UblDraft.build(target.first,target.second)
+                            context.contentResolver.openOutputStream(uri,"wt")?.use { it.write(bytes) } ?: error("Datoteka nije dostupna")
+                        }
+                    }
+                    exportStatus=if(result.isSuccess)"Testni UBL nacrt spremljen." else "Izvoz nije uspio. Provjerite podatke."
+                }finally{exporting=false}
+            }
+        }
+    }
     fun create(type: String) { kind = type; page = "Novi"; selected = null; error = "" }
     Scaffold(
         topBar = { Row(Modifier.fillMaxWidth().background(Navy).statusBarsPadding().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -111,11 +130,19 @@ private fun FiskApp(store: DraftStore, directory: DirectoryStore, businessStore:
                     draft.lines.forEach { line -> Panel { Text(line.description, fontWeight = FontWeight.Bold); Text(line.quantity.toPlainString() + " × " + euro(line.unitPrice)); Text(euro(line.total)) } }
                     Panel { Text("Ukupno", fontWeight = FontWeight.Bold); Text(euro(draft.total), fontSize = 26.sp) }
                     Text("Dokument nije izdan niti fiskaliziran.")
-                    OutlinedButton(enabled = !exporting && exportTarget == null, onClick = {
+                    OutlinedButton(enabled = !exporting && exportTarget == null && ublTarget == null, onClick = {
                         exportStatus = ""
                         exportTarget = draft
                         pdfPicker.launch("FiskAI-nacrt-" + draft.id.take(8) + ".pdf")
                     }, modifier = Modifier.fillMaxWidth()) { Text(if(exporting) "Spremanje…" else "Izvezi PDF nacrt") }
+                    if(draft.kind=="Račun") {
+                        OutlinedButton(enabled=!exporting && exportTarget==null && ublTarget==null && UblDraft.canExport(draft,business),onClick={
+                            exportStatus=""
+                            ublTarget=draft to business
+                            ublPicker.launch("FiskAI-TEST-UBL-"+draft.id.take(8)+".xml")
+                        },modifier=Modifier.fillMaxWidth()) { Text("Izvezi testni UBL nacrt") }
+                        Text("Za UBL nacrt potrebni su OIB kupca i prodavatelja, naziv i adresa prodavatelja, KPD i jedinica mjere svake stavke te podržane stope PDV-a. XML nije izdan eRačun.")
+                    }
                     if(exportStatus.isNotEmpty()) Text(exportStatus)
                 }
                 page == "Novi" -> key(kind) { DraftForm(kind, error, contacts.filter { !it.supplier }, products.filterNot { it.archived }) { draft ->
@@ -195,6 +222,7 @@ private fun DraftForm(kind: String, saveError: String, contacts: List<Contact>, 
     var price by remember { mutableStateOf("") }
     var vat by remember { mutableStateOf("25") }
     var kpd by remember { mutableStateOf("") }
+    var unitCode by remember { mutableStateOf("") }
     var lines by remember { mutableStateOf(listOf<Line>()) }
     var message by remember { mutableStateOf("") }
     Text(if(kind == "Račun") "Novi račun" else "Nova ponuda", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
@@ -213,6 +241,7 @@ private fun DraftForm(kind: String, saveError: String, contacts: List<Contact>, 
         if(products.isNotEmpty()) DirectoryPicker("Odaberi artikl", products.map { it.name }) { index -> val product = products[index]; description = product.name; price = product.price.toPlainString(); vat = product.vat.toPlainString(); kpd=product.kpd }
         OutlinedTextField(description, { description = it }, label = { Text("Naziv proizvoda ili usluge") }, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(kpd,{kpd=it},label={Text("KPD 2025 (neobavezno za nacrt)")},modifier=Modifier.fillMaxWidth(),singleLine=true)
+        DirectoryPicker("Jedinica mjere: "+(UblDraft.units[unitCode] ?: "Odaberi"),UblDraft.units.values.toList()){unitCode=UblDraft.units.keys.elementAt(it)}
         OutlinedTextField(quantity, { quantity = it }, label = { Text("Količina") }, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(price, { price = it }, label = { Text("Jedinična cijena bez PDV-a") }, modifier = Modifier.fillMaxWidth())
         Text("Stopa PDV-a (radni izračun)")
@@ -223,7 +252,7 @@ private fun DraftForm(kind: String, saveError: String, contacts: List<Contact>, 
             val q = parseDecimal(quantity); val p = parseDecimal(price)
             if(description.isBlank() || q == null || p == null || q.signum() <= 0 || p.signum() < 0 || q.precision() > 12 || p.precision() > 12 || q.scale() !in 0..4 || p.scale() !in 0..4) message = "Provjerite naziv, količinu i cijenu."
             else if(kpd.isNotBlank() && normalizeKpd(kpd)==null) message="KPD mora imati šest znamenki."
-            else { lines = lines + Line(description.trim(), q, p, BigDecimal(vat),normalizeKpd(kpd).orEmpty()); description = ""; price = ""; quantity = "1"; kpd=""; message = "" }
+            else { lines = lines + Line(description.trim(), q, p, BigDecimal(vat),normalizeKpd(kpd).orEmpty(),unitCode); description = ""; price = ""; quantity = "1"; kpd=""; unitCode=""; message = "" }
         }, modifier = Modifier.fillMaxWidth()) { Text("+ Dodaj stavku") }
     }
     Panel {

@@ -18,7 +18,7 @@ class DraftStore(context: Context) {
             val lines = item.getJSONArray("lines")
             Draft(item.getString("id"), item.getString("kind"), item.getString("customer"), item.getString("oib"), List(lines.length()) { j ->
                 val row = lines.getJSONObject(j)
-                Line(row.getString("description"), BigDecimal(row.getString("quantity")), BigDecimal(row.getString("price")), BigDecimal(row.getString("vat")),row.optString("kpd"))
+                Line(row.getString("description"), BigDecimal(row.getString("quantity")), BigDecimal(row.getString("price")), BigDecimal(row.getString("vat")),row.optString("kpd"),row.optString("unitCode"))
             })
         }
     }
@@ -26,7 +26,7 @@ class DraftStore(context: Context) {
         val arr = JSONArray()
         items.forEach { draft ->
             val lines = JSONArray()
-            draft.lines.forEach { line -> lines.put(JSONObject().put("description", line.description).put("quantity", line.quantity.toPlainString()).put("price", line.unitPrice.toPlainString()).put("vat", line.vatRate.toPlainString()).put("kpd",line.kpd)) }
+            draft.lines.forEach { line -> lines.put(JSONObject().put("description", line.description).put("quantity", line.quantity.toPlainString()).put("price", line.unitPrice.toPlainString()).put("vat", line.vatRate.toPlainString()).put("kpd",line.kpd).put("unitCode",line.unitCode)) }
             arr.put(JSONObject().put("id", draft.id).put("kind", draft.kind).put("customer", draft.customer).put("oib", draft.oib).put("lines", lines))
         }
         return prefs.write("drafts", arr.toString())

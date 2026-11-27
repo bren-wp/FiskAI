@@ -19,7 +19,7 @@ internal class DemoLedger(context:Context,private val db:RecordDatabase=RecordDa
         val time=System.currentTimeMillis()
         val year=Calendar.getInstance(TimeZone.getTimeZone("Europe/Zagreb")).apply { timeInMillis=time }.get(Calendar.YEAR)
         val lines=JSONArray()
-        draft.lines.forEach { line -> lines.put(JSONObject().put("description",line.description).put("quantity",line.quantity.toPlainString()).put("unitPrice",line.unitPrice.toPlainString()).put("vatRate",line.vatRate.toPlainString()).put("kpd",line.kpd).put("net",line.net.toPlainString()).put("vat",line.vat.toPlainString()).put("total",line.total.toPlainString())) }
+        draft.lines.forEach { line -> lines.put(JSONObject().put("description",line.description).put("quantity",line.quantity.toPlainString()).put("unitPrice",line.unitPrice.toPlainString()).put("vatRate",line.vatRate.toPlainString()).put("kpd",line.kpd).put("unitCode",line.unitCode).put("net",line.net.toPlainString()).put("vat",line.vat.toPlainString()).put("total",line.total.toPlainString())) }
         val payload=JSONObject().put("environment","DEMO").put("draft",draft.id).put("created",time).put("seller",business.name).put("sellerOib",business.oib).put("sellerAddress",business.address).put("sellerCity",business.city).put("vatRegistered",business.vatRegistered).put("customer",draft.customer).put("customerOib",draft.oib).put("operatorOib",operator.oib).put("premise",register.premise).put("register",register.number).put("total",draft.total.toPlainString()).put("lines",lines)
         val sealed=secure.sealSnapshot(id,payload.toString())
         val sql=db.writableDatabase

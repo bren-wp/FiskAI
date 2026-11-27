@@ -1,5 +1,5 @@
-# Alpha12 acceptance status
+# Alpha13 acceptance status
 
-Alpha11 Android CI #24 passed. New web foundation includes PHP public page, read-only public price-list and KPD APIs, token-protected synchronous price publication, transactional MySQL/MariaDB schema, CSV/XML serialization and 15-day archive access, official DZS JSON import script and KPD search, PHP unit and MySQL integration tests. Android version bumped to alpha12. No live server or DB test result, actual KPD import, Android sync, automated scheduling or legal certification yet. MariaDB test remains pending.
+Alpha12 web CI passed (run 4); Android result checked separately. New code: offline B2C XMLDSig signing foundation and independent xmlsec1 CI verification, Android read-only KPD HTTPS lookup in product editor, units in line snapshots and test UBL XML export. No downgrade of selected Android dependencies. New CI, emulator tests and actual backend connection pending.
 
-All remaining fiscal requirements, provider authorization, Room, POS, warehouse, HUB3/EPC, KPR/PO-SD, web administration, branding and device tests remain gates. No production issuance or stable release.
+Remaining: official contracts and validation, certificate authorization, real ZKI/JIR and authorized DEMO receipt, F2 exchange/provider/eReporting, normalized Room, secure backups, price publication sync and deadline scheduler, POS/inventory, payment codes, KPR/PO-SD, complete web/admin, original branding and real screenshots, full security/dead-code/clone audits, verified release. See ACCEPTANCE.md and XML-UBL.md.

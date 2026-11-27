@@ -11,3 +11,6 @@
 
 ## Alpha12
 PHP web and MySQL/MariaDB price publishing/archive foundation, KPD import/search and integration tests added. Deployment, real DZS import, Android synchronization, scheduler and legal verification still pending. No change to production fiscal lock. CI must pass before any release.
+
+## Alpha13
+Offline request XMLDSig foundation, independent xmlsec verification in CI, Android HTTPS KPD lookup and local UBL draft export. No new external dependency. Certificate authorization, official schema validation, signed response verification, DEMO receipt submission, F2 transport, complete HR-CIUS, actual backend deployment and on-device tests remain pending. Original brand assets and full audits remain open.

@@ -133,6 +133,7 @@ internal fun ProductScreen(products: List<Product>, onSave: (List<Product>) -> B
                     Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(checked = service, onCheckedChange = { service = it }); Text("Usluga") }
                     OutlinedTextField(kpd,{kpd=it},label={Text("KPD 2025 (XX.XX.XX)")},singleLine=true)
                     Text("Šifru provjerite u službenom KLASUS katalogu; format ne potvrđuje klasifikaciju.")
+                    KpdLookup { kpd=it }
                     OutlinedTextField(gross,{gross=it},label={Text("Maloprodajna cijena (€)")},singleLine=true)
                     OutlinedTextField(basePrice,{basePrice=it},label={Text("Bazna cijena (€)")},singleLine=true)
                     OutlinedTextField(reference,{reference=it},label={Text("Referentni datum (GGGG-MM-DD)")},singleLine=true)

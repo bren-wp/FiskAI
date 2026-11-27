@@ -28,3 +28,13 @@ jobs:
       - run: find web -name '*.php' -print0 | xargs -0 -n1 php -l
       - run: php web/tests/PriceListsTest.php
       - run: php web/tests/DatabaseTest.php
+      - run: php web/tests/FiscalSignatureTest.php
+      - run: sudo apt-get update && sudo apt-get install -y xmlsec1
+      - run: |
+          dir="$(mktemp -d)"
+          trap 'rm -rf "$dir"' EXIT
+          php web/tests/FiscalSignatureTest.php "$dir"
+          xmlsec1 --verify --pubkey-cert-pem "$dir/cert.pem" --id-attr:Id RacunZahtjev "$dir/signed.xml"
+          if xmlsec1 --verify --pubkey-cert-pem "$dir/cert.pem" --id-attr:Id RacunZahtjev "$dir/tampered.xml"; then
+            echo "Modified XML unexpectedly verified"; exit 1
+          fi

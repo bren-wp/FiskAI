@@ -3,7 +3,7 @@ package hr.brendigo.fiskai
 import java.math.BigDecimal
 import java.math.RoundingMode
 
-data class Line(val description: String, val quantity: BigDecimal, val unitPrice: BigDecimal, val vatRate: BigDecimal, val kpd:String = "") {
+data class Line(val description: String, val quantity: BigDecimal, val unitPrice: BigDecimal, val vatRate: BigDecimal, val kpd:String = "", val unitCode:String = "") {
     init { require(description.isNotBlank()); require(quantity.signum() > 0); require(unitPrice.signum() >= 0); require(vatRate in BigDecimal.ZERO..BigDecimal("100")) }
     val net: BigDecimal get() = quantity.multiply(unitPrice).setScale(2, RoundingMode.HALF_UP)
     val vat: BigDecimal get() = net.multiply(vatRate).movePointLeft(2).setScale(2, RoundingMode.HALF_UP)
