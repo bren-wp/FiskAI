@@ -31,6 +31,19 @@ final class CisEducRecovery {
         try{$result=$work();$this->db->commit();return $result;}
         catch(Throwable $e){if($this->db->inTransaction())$this->db->rollBack();throw $e;}
     }
+    private function migrationManifest():array {
+        $manifest=[];
+        foreach(['003_cis_educ_response_evidence.sql','006_cis_educ_dispatch.sql','007_cis_educ_audit.sql'] as $name){
+            $file=__DIR__.'/../database/'.$name;
+            $expected=hash_file('sha256',$file);
+            $s=$this->db->prepare("SELECT checksum FROM fiskai_schema_migrations WHERE migration=? AND state='applied'");
+            $s->execute([$name]);$actual=$s->fetchColumn();
+            if(!is_string($expected)||!is_string($actual)||!hash_equals($expected,$actual))
+                throw new RuntimeException('Recovery schema history mismatch.');
+            $manifest[$name]=$expected;
+        }
+        return $manifest;
+    }
     private function snapshot(string $subject):array {
         $tables=[];$bytes=0;
         foreach(self::TABLES as $table=>$columns){
@@ -79,7 +92,7 @@ final class CisEducRecovery {
         $payload=$this->transaction(function()use($subject,$keyId,$storageKey){
             $tables=$this->snapshot($subject);
             $this->validateStored($subject,$tables,$keyId,$storageKey);
-            return json_encode(['version'=>1,'subject'=>$subject,'keyId'=>$keyId,'tables'=>$tables],JSON_THROW_ON_ERROR);
+            return json_encode(['version'=>1,'subject'=>$subject,'keyId'=>$keyId,'migrations'=>$this->migrationManifest(),'tables'=>$tables],JSON_THROW_ON_ERROR);
         });
         if(strlen($payload)>self::MAX)throw new RuntimeException('Archive too large.');
         $nonce=random_bytes(12);$tag='';
@@ -98,7 +111,7 @@ final class CisEducRecovery {
             substr($archive,$offset,12),substr($archive,$offset+12,16),self::MAGIC.$subject);
         if($plain===false)throw new InvalidArgumentException('Archive authentication failed.');
         $root=json_decode($plain,true,16,JSON_THROW_ON_ERROR);
-        if(!is_array($root)||array_keys($root)!==['version','subject','keyId','tables']||$root['version']!==1||$root['subject']!==$subject||
+        if(!is_array($root)||array_keys($root)!==['version','subject','keyId','migrations','tables']||$root['version']!==1||$root['subject']!==$subject||
             $root['keyId']!==$keyId||!is_array($root['tables'])||array_keys($root['tables'])!==array_keys(self::TABLES))
             throw new InvalidArgumentException('Archive metadata mismatch.');
         $tables=$root['tables'];
@@ -117,7 +130,8 @@ final class CisEducRecovery {
                     throw new InvalidArgumentException('Invalid archive reference.');
             }
         }
-        return $this->transaction(function()use($subject,$keyId,$tables,$storageKey){
+        return $this->transaction(function()use($subject,$keyId,$tables,$storageKey,$root){
+            if($root['migrations']!==$this->migrationManifest())throw new InvalidArgumentException('Archive schema history mismatch.');
             // Deliberately refuse an existing subject; no destructive overwrite or merge.
             $s=$this->db->prepare('SELECT message_id FROM cis_educ_response_evidence WHERE subject_id=? FOR UPDATE');
             $s->execute([$subject]);if($s->fetchColumn()!==false)throw new DomainException('Recovery target already contains subject records.');
