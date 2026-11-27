@@ -11,13 +11,15 @@ function f2File(string $path,int $limit):string {
     return $bytes;
 }
 try{
-    if($argc!==9)throw new InvalidArgumentException('Usage: DOCUMENT_UUID DIRECTION EVENT_DATE UBL_XML SVRL VALIDATION_JSON VALIDATION_DER EDUC');
+    if($argc!==9&&$argc!==10)throw new InvalidArgumentException('Usage: DOCUMENT_UUID DIRECTION EVENT_DATE UBL_XML EN_SVRL VALIDATION_JSON VALIDATION_DER [HR_SVRL] EDUC');
+    $dual=$argc===10;
     // Trust configuration is selected only by an authorized operator via the environment.
     $configPath=getenv('FISKAI_F2_EDUC_CONFIG');
-    if(!is_string($configPath)||$argv[8]!=='EDUC')throw new LogicException('Explicit EDUC operator configuration required.');
+    if(!is_string($configPath)||$argv[$argc-1]!=='EDUC')throw new LogicException('Explicit EDUC operator configuration required.');
     $c=json_decode(f2File($configPath,262144),true,32,JSON_THROW_ON_ERROR);
     if(!is_array($c)||!is_string($c['subject']??null)||!is_array($c['history']??null)||!is_array($c['schemaPins']??null)||
         !is_array($c['kpd']??null))throw new InvalidArgumentException('Invalid operator configuration.');
+    if(isset($c['hrValidatorManifestPin'])!==$dual)throw new LogicException('Configured validator mode must match supplied evidence.');
     $xml=f2File($argv[4],1048576);
     // Select the approved KPD edition from the invoice issue date (not receipt date).
     $db=db();
@@ -31,6 +33,7 @@ try{
     $result=$service->prepare($c['subject'],$argv[1],$argv[2],$argv[3],$xml,$history,$c['scope'],$c['schemaDir'],$c['schemaPins'],$c['entry'],$c['schemaDigest'],
         $kpd['sourceSha256'],$kpd['catalogSha256'],f2File($argv[5],1048576),f2File($argv[6],2048),f2File($argv[7],80),
         f2File($c['validatorPublicKey'],8192),$c['validatorKeyPin'],$c['validatorManifestPin'],
-        f2File($c['grantStatement'],4096),f2File($c['grantSignature'],80),f2File($c['grantPublicKey'],8192),$c['grantKeyPin']);
+        f2File($c['grantStatement'],4096),f2File($c['grantSignature'],80),f2File($c['grantPublicKey'],8192),$c['grantKeyPin'],
+        $dual?f2File($argv[8],1048576):null,$dual?$c['hrValidatorManifestPin']:null);
     echo json_encode($result,JSON_THROW_ON_ERROR).PHP_EOL;
 }catch(Throwable $e){fwrite(STDERR,"F2 EDUC intake failed: ".get_class($e).".\n");exit(1);}
