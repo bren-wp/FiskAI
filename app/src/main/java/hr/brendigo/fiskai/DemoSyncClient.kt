@@ -92,10 +92,18 @@ internal object DemoSyncClient {
         val destination=URI(endpoint(url).toASCIIString().removeSuffix("demo-sync")+"demo-sync-pull")
         return snapshot(subject,exchange(destination,token,JSONObject().put("protocol",1).put("subjectId",subject),SNAPSHOT_LIMIT))
     }
+    fun documentExchange(url:String,subject:String,token:String,envelope:String?=null):JSONObject {
+        check(BuildConfig.DEMO_MODE);identity(subject)
+        val action=if(envelope==null)"demo-documents-pull" else "demo-documents-push"
+        val destination=URI(endpoint(url).toASCIIString().removeSuffix("demo-sync")+action)
+        val request=JSONObject().put("protocol",1).put("subjectId",subject)
+        if(envelope!=null)request.put("envelope",envelope)
+        return exchange(destination,token,request,SNAPSHOT_LIMIT)
+    }
     private fun exchange(destination:URI,token:String,request:JSONObject,responseLimit:Int):JSONObject {
         val subject=identity(request.getString("subjectId"))
         val action=destination.rawQuery.removePrefix("action=")
-        require(action in setOf("demo-sync","demo-sync-pull"))
+        require(action in setOf("demo-sync","demo-sync-pull","demo-documents-push","demo-documents-pull"))
         val challenge=URI(destination.toASCIIString().substringBefore("?")+"?action=demo-sync-challenge")
         val response=exchangeRaw(challenge,token,JSONObject().put("protocol",1).put("subjectId",subject).toString().toByteArray(Charsets.UTF_8),LIMIT)
         require(response.keys().asSequence().toSet()==setOf("protocol","subjectId","deviceId","nonce"))
@@ -108,7 +116,7 @@ internal object DemoSyncClient {
     }
     private fun exchangeRaw(destination:URI,token:String,payload:ByteArray,responseLimit:Int,nonce:String?=null,signature:String?=null):JSONObject {
         require(token.matches(Regex("[0-9a-f]{64}")))
-        require(payload.size<=LIMIT)
+        require(payload.size<=if(destination.rawQuery=="action=demo-documents-push")1600000 else LIMIT)
         val conn=destination.toURL().openConnection(Proxy.NO_PROXY) as HttpsURLConnection
         try {
             conn.instanceFollowRedirects=false
