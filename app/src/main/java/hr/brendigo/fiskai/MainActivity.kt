@@ -180,6 +180,7 @@ private fun FiskApp(store: DraftStore, directory: DirectoryStore, businessStore:
                     directory.saveProducts(next).also { if(it) products = next }
                 }
                 page == "Poslovni prostori" || page == "Naplatni uređaji" || page == "Operateri" -> FiscalSetupScreen(page, fiscalStore)
+                page == "Platni kodovi" -> PaymentCodesScreen(business)
                 page == "Skladište" -> InventoryScreen(products.filter { !it.service && !it.archived })
                 page == "POS blagajna" -> PosDraftScreen(products.filterNot { it.archived }, contacts.filterNot { it.supplier }) { draft ->
                     val updated=items+draft
@@ -193,7 +194,7 @@ private fun FiskApp(store: DraftStore, directory: DirectoryStore, businessStore:
                 }
                 else -> {
                     Text("Više", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    listOf("Kupci", "Dobavljači", "Proizvodi i usluge", "Poslovni subjekt", "Poslovni prostori", "Naplatni uređaji", "Operateri", "Certifikati", "Test fiskalizacije", "DEMO računi", "POS blagajna", "Skladište").forEach { destination ->
+                    listOf("Kupci", "Dobavljači", "Proizvodi i usluge", "Poslovni subjekt", "Poslovni prostori", "Naplatni uređaji", "Operateri", "Certifikati", "Test fiskalizacije", "DEMO računi", "POS blagajna", "Skladište", "Platni kodovi").forEach { destination ->
                         OutlinedButton(onClick = { page = destination }, modifier = Modifier.fillMaxWidth()) { Text(destination) }
                     }
                     Panel { Text("Lokalna pohrana"); Text("Lokalni zapisi zaštićeni su ključem ovog uređaja. Fiskalizacija i eRačuni još nisu dostupni.") }

@@ -13,6 +13,7 @@ FiskAI je hrvatska Android aplikacija za pripremu računa i ponuda, upravljanje 
 | 📦 **Proizvodi i usluge** | Šifre artikala, KPD oznake i povijest maloprodajnih cijena. |
 | 🔒 **Privatnost** | Lokalno šifrirani poslovni zapisi. |
 | 📦 **Skladište i POS** | Evidencija kretanja zaliha i POS košarica za nacrte računa. |
+| 💳 **Platni kodovi** | Lokalno generiranje HUB-3 PDF417 i EPC QR kodova za provjeru podataka plaćanja. |
 | 🏢 **Poslovne postavke** | Poslovni subjekt, prostori, uređaji i operateri. |
 
 <p align="center"><img src="brending/logo.svg" alt="FiskAI" width="240"></p>
