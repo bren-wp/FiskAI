@@ -13,6 +13,13 @@ final class CisEducHttpsTransport {
         if(PHP_SAPI!=='cli'||getenv('FISKAI_CIS_RECOVERY_MODE')==='1'||getenv('FISKAI_CIS_EDUC_ENABLED')!=='1'||
             getenv('FISKAI_CIS_EDUC_AUTHORIZED_SUBJECT')!==$subject)
             throw new LogicException('EDUC transport is not authorized by local configuration.');
+        $actor=getenv('FISKAI_CIS_OPERATOR_ID');
+        $oib=getenv('FISKAI_CIS_EDUC_AUTHORIZED_OIB');
+        $info=openssl_x509_parse($signer,false);
+        $identity=$info['subject']['organizationIdentifier']??$info['subject']['2.5.4.97']??null;
+        if(!is_string($actor)||!preg_match('/\A[A-Za-z0-9_.-]{1,64}\z/D',$actor)||
+            !is_string($oib)||!preg_match('/\A[0-9]{11}\z/D',$oib)||!is_string($identity)||!hash_equals('VATHR-'.$oib,$identity))
+            throw new LogicException('Authorized operator and certificate OIB required.');
         if(!extension_loaded('curl'))throw new RuntimeException('cURL unavailable.');
         $tlsCa=CisCertificateTrust::approvedBundle('FISKAI_CIS_EDUC_TLS_CA');
         $tlsCrl=CisCertificateTrust::approvedBundle('FISKAI_CIS_EDUC_TLS_CRL');
