@@ -4,6 +4,7 @@ require_once __DIR__.'/CisEducRequestPreparation.php';
 require_once __DIR__.'/CisEducResponseEvidence.php';
 require_once __DIR__.'/CisEducHttpsTransport.php';
 require_once __DIR__.'/EducBusinessLedger.php';
+require_once __DIR__.'/EducExternalCheckpoint.php';
 
 /** EDUC lifecycle. External transport disabled unless explicitly authorized; no PROD support.
  * Caller must provide trusted immutable domain document and independently approved pins.
@@ -136,6 +137,7 @@ final class CisEducDispatch {
             $entry['document']['messageId']!==$message||$entry['document']['ownerOib']!==getenv('FISKAI_CIS_EDUC_AUTHORIZED_OIB'))
             throw new DomainException('Dispatch document binding mismatch.');
         EducBusinessLedger::assertBound($entry['document'],self::decrypt($r,$storageKey),$signer);
+        EducExternalCheckpoint::requireLatest((new EducBusinessLedger($this->db))->checkpoint($subject,$storageKey));
         $reserved=$this->reserve($subject,$message,$storageKey);
         try{
             $soap=CisEducHttpsTransport::post($subject,$reserved['soap'],$signer,$trusted,$r['signer_sha256'],$r['trust_sha256']);
