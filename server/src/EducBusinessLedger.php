@@ -195,10 +195,42 @@ final class EducBusinessLedger {
     public function append(string $subject,array $input,string $storageKey):array {
         return $this->record($subject,$input,$storageKey,false);
     }
-    private function record(string $subject,array $input,string $storageKey,bool $allocate):array {
+    /** Operator-approved immutable batch from an independently pinned business import signer.
+     * Exact prior head required; no DEMO conversion, renumbering or conflict overwrite.
+     */
+    public function mergeSigned(string $subject,string $statement,string $signature,string $public,string $pin,string $storageKey):array {
         if($this->db->inTransaction())throw new LogicException('Own transaction required.');
-        [$enc,$mac]=self::keys($storageKey);
+        if(strlen($statement)>262144||strlen($signature)>80||strlen($public)>8192||
+            !preg_match('/\A[0-9a-f]{64}\z/D',$pin)||!hash_equals($pin,hash('sha256',$public)))
+            throw new InvalidArgumentException('Invalid import trust material.');
+        $key=openssl_pkey_get_public($public);$details=$key===false?false:openssl_pkey_get_details($key);
+        if(!$details||$details['type']!==OPENSSL_KEYTYPE_EC||($details['ec']['curve_name']??'')!=='prime256v1'||
+            openssl_verify("FISKAI-EDUC-MERGE-V1\n".$statement,$signature,$key,OPENSSL_ALGO_SHA256)!==1)
+            throw new DomainException('Invalid import signature.');
+        $bundle=json_decode($statement,true,16,JSON_THROW_ON_ERROR);
+        if(!is_array($bundle)||array_keys($bundle)!==['subject','base','documents']||$bundle['subject']!==$subject||
+            !is_array($bundle['base'])||!is_array($bundle['documents'])||!array_is_list($bundle['documents'])||
+            count($bundle['documents'])<1||count($bundle['documents'])>30)
+            throw new InvalidArgumentException('Invalid import batch.');
         $this->db->beginTransaction();
+        try{
+            $current=$this->checkpoint($subject,$storageKey);
+            if($current!==$bundle['base'])throw new DomainException('Import base checkpoint changed.');
+            $ids=[];$accepted=[];
+            foreach($bundle['documents'] as $input){
+                if(!is_array($input)||!is_string($input['documentId']??null)||isset($ids[$input['documentId']]))
+                    throw new InvalidArgumentException('Duplicate or malformed import document.');
+                $ids[$input['documentId']]=true;
+                $accepted[]=$this->record($subject,$input,$storageKey,false,true);
+            }
+            $head=$this->checkpoint($subject,$storageKey);
+            $this->db->commit();return ['status'=>'EDUC_BATCH_MERGED','documents'=>$accepted,'checkpoint'=>$head];
+        }catch(Throwable $e){if($this->db->inTransaction())$this->db->rollBack();throw $e;}
+    }
+    private function record(string $subject,array $input,string $storageKey,bool $allocate,bool $batch=false):array {
+        if($this->db->inTransaction()!==$batch)throw new LogicException('Unexpected transaction state.');
+        [$enc,$mac]=self::keys($storageKey);
+        if(!$batch)$this->db->beginTransaction();
         try {
             $scope=$this->subject($subject,true);
             $s=$this->db->prepare('SELECT subject_id FROM educ_recovery_quarantine WHERE subject_id=? FOR UPDATE');
@@ -212,7 +244,7 @@ final class EducBusinessLedger {
                     if($existing['document']['documentId']===$candidate['documentId']){
                         $retry=self::normalize(array_replace($input,['number'=>$existing['document']['number']]),$scope['owner_oib']);
                         if($retry!==$existing['document'])throw new DomainException('Immutable document conflict.');
-                        $this->db->commit();return $existing;
+                        if(!$batch)$this->db->commit();return $existing;
                     }
                 }
                 $input['number']=self::nextNumber($rows,$candidate);
@@ -224,7 +256,7 @@ final class EducBusinessLedger {
                 $d=$existing['document'];
                 if($d['documentId']===$doc['documentId']){
                     if($existing['digest']!==$digest)throw new DomainException('Immutable document conflict.');
-                    $this->db->commit();return $existing;
+                    if(!$batch)$this->db->commit();return $existing;
                 }
                 if($d['messageId']===$doc['messageId']||[$d['year'],$d['premise'],$d['register'],$d['number']]===[$doc['year'],$doc['premise'],$doc['register'],$doc['number']])
                     throw new DomainException('Duplicate fiscal identity.');
@@ -247,9 +279,9 @@ final class EducBusinessLedger {
             $head=self::headMac($scope,$r['chain_position'],$r['entry_mac'],$mac);
             $s=$this->db->prepare('INSERT INTO educ_business_chain_head(subject_id,chain_position,entry_mac,head_mac) VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE chain_position=VALUES(chain_position),entry_mac=VALUES(entry_mac),head_mac=VALUES(head_mac)');
             $s->execute([$subject,$r['chain_position'],$r['entry_mac'],$head]);
-            $this->db->commit();
+            if(!$batch)$this->db->commit();
             return ['document'=>$doc,'digest'=>$digest,'mac'=>$r['entry_mac'],'keyId'=>$scope['key_id']];
-        }catch(Throwable $e){if($this->db->inTransaction())$this->db->rollBack();throw $e;}
+        }catch(Throwable $e){if(!$batch&&$this->db->inTransaction())$this->db->rollBack();throw $e;}
     }
     /** Derive next number from the authenticated history, never from an unverified counter.
      * Historical gaps remain untouched and require review before allocating any new number.
