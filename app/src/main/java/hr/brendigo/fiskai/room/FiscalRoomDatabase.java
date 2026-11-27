@@ -7,7 +7,7 @@ import androidx.room.Room;
 import androidx.room.RoomDatabase;
 import androidx.sqlite.db.SupportSQLiteDatabase;
 
-@Database(entities={FiscalDocument.class,FiscalQueueEntry.class,IncomingInvoiceRow.class,BankTransactionRow.class,ReceiptEventRow.class},version=8,exportSchema=true)
+@Database(entities={FiscalDocument.class,FiscalQueueEntry.class,IncomingInvoiceRow.class,BankTransactionRow.class,ReceiptEventRow.class,PaymentPreparationRow.class},version=9,exportSchema=true)
 public abstract class FiscalRoomDatabase extends RoomDatabase {
     public abstract FiscalQueueDao queue();
     public abstract IncomingInvoiceDao incoming();
@@ -29,11 +29,15 @@ public abstract class FiscalRoomDatabase extends RoomDatabase {
             .addMigrations(new androidx.room.migration.Migration(7,8) {
                 @Override public void migrate(@NonNull SupportSQLiteDatabase db) { ReceiptSchema.create(db::execSQL); }
             })
+            .addMigrations(new androidx.room.migration.Migration(8,9) {
+                @Override public void migrate(@NonNull SupportSQLiteDatabase db) { PaymentPreparationSchema.create(db::execSQL); }
+            })
             .addCallback(new Callback() {
                 @Override public void onCreate(@NonNull SupportSQLiteDatabase db) {
                     FiscalSchema.createTriggers(db::execSQL);
                     IncomingSchema.create(db::execSQL);
                     ReceiptSchema.create(db::execSQL);
+                    PaymentPreparationSchema.create(db::execSQL);
                 }
             }).build();
     }
