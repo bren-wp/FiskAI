@@ -2,8 +2,9 @@
 declare(strict_types=1);
 require_once __DIR__.'/CisEducRequestPreparation.php';
 require_once __DIR__.'/CisEducResponseEvidence.php';
+require_once __DIR__.'/CisEducHttpsTransport.php';
 
-/** Offline EDUC lifecycle. No external transport or production authorization.
+/** EDUC lifecycle. External transport disabled unless explicitly authorized; no PROD support.
  * Caller must provide trusted immutable domain document and independently approved pins.
  * No automatic re-reservation after an uncertain outcome.
  */
@@ -85,6 +86,32 @@ final class CisEducDispatch {
         $s=$this->db->prepare("UPDATE cis_educ_dispatch SET state='UNCERTAIN',updated_at=UTC_TIMESTAMP(6) WHERE subject_id=? AND message_id=? AND state='RESERVED' AND reservation_sha256=?");
         $s->execute([$subject,$message,hash('sha256',$reservation)]);return $s->rowCount()===1;
     }
+    /** Operator-controlled EDUC send. Failure after reservation is always ambiguous. */
+    public function dispatchAuthorized(string $subject,string $message,OpenSSLCertificate $signer,
+        OpenSSLCertificate $trusted,string $schemaDir,string $storageKey):string {
+        $r=$this->row($subject,$message);
+        CisEducHttpsTransport::authorize($subject,$signer,$trusted,$r['signer_sha256'],$r['trust_sha256']);
+        $reserved=$this->reserve($subject,$message,$storageKey);
+        try{
+            $soap=CisEducHttpsTransport::post($subject,$reserved['soap'],$signer,$trusted,$r['signer_sha256'],$r['trust_sha256']);
+            return $this->verifyResponse($subject,$message,$reserved['reservation'],$soap,$trusted,$schemaDir,$storageKey);
+        }catch(Throwable $e){
+            // Preserve uncertainty even when the network succeeded but verification or persistence failed.
+            $this->uncertain($subject,$message,$reserved['reservation']);
+            throw $e;
+        }
+    }
+    /** CLI operator recovery after process loss; only a pinned, signed response can resolve uncertainty.
+     * Does not perform a query to CIS or authorize a new submission.
+     */
+    public function recoverVerifiedResponse(string $subject,string $message,string $soap,
+        OpenSSLCertificate $trusted,string $schemaDir,string $storageKey):string {
+        return $this->transaction(function()use($subject,$message,$soap,$trusted,$schemaDir,$storageKey){
+            $r=$this->row($subject,$message,true);
+            if($r['state']!=='UNCERTAIN')throw new DomainException('Only uncertain dispatch may be reconciled.');
+            return $this->persistVerified($r,$soap,$trusted,$schemaDir,$storageKey);
+        });
+    }
     /** Accept independently supplied signed EDUC evidence, not an assertion from the client.
      * Synthetic fixtures prove cryptographic behavior only, never actual CIS submission.
      */
@@ -94,15 +121,18 @@ final class CisEducDispatch {
             $r=$this->row($subject,$message,true);
             if(!in_array($r['state'],['RESERVED','UNCERTAIN','VERIFIED'],true)||!is_string($r['reservation_sha256'])||
                 !hash_equals($r['reservation_sha256'],hash('sha256',$reservation)))throw new DomainException('Unknown reservation.');
-            self::decrypt($r,$storageKey);
-            $ledger=new CisEducResponseEvidence($this->db);
-            $jir=$ledger->verifyAndStore($subject,$message,$soap,$trusted,$schemaDir,$storageKey);
-            if($r['state']!=='VERIFIED'){
-                $s=$this->db->prepare("UPDATE cis_educ_dispatch SET state='VERIFIED',updated_at=UTC_TIMESTAMP(6) WHERE subject_id=? AND message_id=? AND state IN ('RESERVED','UNCERTAIN')");
-                $s->execute([$subject,$message]);
-                if($s->rowCount()!==1)throw new RuntimeException('Verification transition lost.');
-            }
-            return $jir;
+            return $this->persistVerified($r,$soap,$trusted,$schemaDir,$storageKey);
         });
+    }
+    private function persistVerified(array $r,string $soap,OpenSSLCertificate $trusted,string $schemaDir,string $storageKey):string {
+        self::decrypt($r,$storageKey);
+        $ledger=new CisEducResponseEvidence($this->db);
+        $jir=$ledger->verifyAndStore($r['subject_id'],$r['message_id'],$soap,$trusted,$schemaDir,$storageKey);
+        if($r['state']!=='VERIFIED'){
+            $s=$this->db->prepare("UPDATE cis_educ_dispatch SET state='VERIFIED',updated_at=UTC_TIMESTAMP(6) WHERE subject_id=? AND message_id=? AND state IN ('RESERVED','UNCERTAIN')");
+            $s->execute([$r['subject_id'],$r['message_id']]);
+            if($s->rowCount()!==1)throw new RuntimeException('Verification transition lost.');
+        }
+        return $jir;
     }
 }
