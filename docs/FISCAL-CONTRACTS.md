@@ -1,0 +1,5 @@
+# Službeni fiskalizacijski ugovori — integracijska kontrola
+
+Referenca: [Porezna uprava, Fiskalizacija – tehnička specifikacija za korisnike v2.7, 21.07.2026.](https://porezna-uprava.gov.hr/UserDocsImages/Fiskalizacija/Tehni%C4%8Dke%20specifikacije/Fiskalizacija%20-%20Tehnicka%20specifikacija%20za%20korisnike_v2.7%20%2821.07.2026.%29.pdf), poglavlja 4–5 i 8. Testni i produkcijski certifikati su odvojeni; XML odgovor mora imati provjeren elektronički potpis, ne samo valjanu HTTPS vezu.
+
+FiscalContract provjerava XML prema lokalnim, prethodno odobrenim XSD datotekama s SHA-256 manifestom. Zabranjuje vanjske i nepouzdane ovisnosti, ne dohvaća sheme s mreže, odbija izmijenjene datoteke. Trenutni test koristi sintetičku shemu samo za testiranje validatora. Službeni WSDL/XSD paket nije još u repozitoriju; nije potvrđena fiskalna kompatibilnost. Potrebno je uvesti originalne ugovore i provjeriti sve njihove ovisnosti, povezati validator sa stvarnim generatorom i potpisivanjem, provjeriti odgovor prema pouzdanom CIS certifikatu i provesti autorizirane DEMO testove. Ne slati stvarne račune prije tih provjera.

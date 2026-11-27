@@ -41,6 +41,7 @@ jobs:
       - run: php server/tests/PriceDownloadTest.php
       - run: php server/tests/DatabaseTest.php
       - run: php server/tests/SchemaMigratorTest.php
+      - run: php server/tests/FiscalContractTest.php
       - run: php server/tests/FiscalSignatureTest.php
       - name: Install XML signature verifier from official Ubuntu sources
         shell: bash
