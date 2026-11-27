@@ -42,7 +42,17 @@ jobs:
       - run: php server/tests/DatabaseTest.php
       - run: php server/tests/SchemaMigratorTest.php
       - run: php server/tests/FiscalSignatureTest.php
-      - run: sudo apt-get update && sudo apt-get install -y xmlsec1
+      - name: Install XML signature verifier from official Ubuntu sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v xmlsec1 >/dev/null 2>&1; then
+            test -f /etc/apt/sources.list.d/ubuntu.sources
+            opts=(-o Dir::Etc::sourcelist=/etc/apt/sources.list.d/ubuntu.sources -o Dir::Etc::sourceparts=- -o Acquire::Retries=3)
+            sudo apt-get "${opts[@]}" update
+            sudo apt-get "${opts[@]}" install -y --no-install-recommends xmlsec1
+          fi
+          xmlsec1 --version
       - run: |
           dir="$(mktemp -d)"
           trap 'rm -rf "$dir"' EXIT
