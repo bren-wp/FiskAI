@@ -3,8 +3,8 @@ declare(strict_types=1);
 require_once __DIR__.'/CisEducRequestPreparation.php';
 
 /** Bounded, authenticated ledger for a narrow ordinary F1 EDUC invoice profile.
- * Not a production issuance, numbering, or tax determination engine.
- * Operator enters already allocated invoice identity and authoritative net/tax values.
+ * Not a production issuance or tax determination engine.
+ * One subject lock serializes allocation and explicit import within EDUC.
  */
 final class EducBusinessLedger {
     private const LIMIT=1000;
@@ -113,14 +113,37 @@ final class EducBusinessLedger {
             throw new DomainException('Unknown document.');
         }catch(Throwable $e){if($own&&$this->db->inTransaction())$this->db->rollBack();throw $e;}
     }
+    /** Allocate a number and persist the encrypted document in one transaction. */
+    public function issue(string $subject,array $input,string $storageKey):array {
+        if(array_key_exists('number',$input))throw new InvalidArgumentException('Number is allocated by ledger.');
+        return $this->record($subject,$input,$storageKey,true);
+    }
     public function append(string $subject,array $input,string $storageKey):array {
+        return $this->record($subject,$input,$storageKey,false);
+    }
+    private function record(string $subject,array $input,string $storageKey,bool $allocate):array {
         if($this->db->inTransaction())throw new LogicException('Own transaction required.');
         [$enc,$mac]=self::keys($storageKey);
         $this->db->beginTransaction();
         try {
             $scope=$this->subject($subject,true);
-            $doc=self::normalize($input,$scope['owner_oib']);
+            $s=$this->db->prepare('SELECT subject_id FROM educ_recovery_quarantine WHERE subject_id=? FOR UPDATE');
+            $s->execute([$subject]);
+            if($s->fetchColumn()!==false)throw new DomainException('Restored subject cannot issue or import documents.');
             $rows=$this->checkedRows($scope,$storageKey);
+            if($allocate){
+                // Validate every field except the number, and bind retries to the original document.
+                $candidate=self::normalize($input+['number'=>'1'],$scope['owner_oib']);
+                foreach($rows as $existing){
+                    if($existing['document']['documentId']===$candidate['documentId']){
+                        $retry=self::normalize(array_replace($input,['number'=>$existing['document']['number']]),$scope['owner_oib']);
+                        if($retry!==$existing['document'])throw new DomainException('Immutable document conflict.');
+                        $this->db->commit();return $existing;
+                    }
+                }
+                $input['number']=self::nextNumber($rows,$candidate);
+            }
+            $doc=self::normalize($input,$scope['owner_oib']);
             $plain=json_encode($doc,JSON_THROW_ON_ERROR);
             $digest=hash('sha256',$plain);
             foreach($rows as $existing){
@@ -132,6 +155,7 @@ final class EducBusinessLedger {
                 if($d['messageId']===$doc['messageId']||[$d['year'],$d['premise'],$d['register'],$d['number']]===[$doc['year'],$doc['premise'],$doc['register'],$doc['number']])
                     throw new DomainException('Duplicate fiscal identity.');
             }
+            if($doc['number']!==self::nextNumber($rows,$doc))throw new DomainException('Noncontiguous invoice number.');
             if(count($rows)>=self::LIMIT)throw new RuntimeException('Document ledger capacity exceeded.');
             $r=['subject_id'=>$subject,'document_id'=>$doc['documentId'],'message_id'=>$doc['messageId'],'chain_position'=>count($rows)+1,
                 'fiscal_year'=>$doc['year'],'premise'=>$doc['premise'],'register_no'=>$doc['register'],'invoice_no'=>$doc['number'],
@@ -150,6 +174,23 @@ final class EducBusinessLedger {
             $this->db->commit();
             return ['document'=>$doc,'digest'=>$digest,'mac'=>$r['entry_mac'],'keyId'=>$scope['key_id']];
         }catch(Throwable $e){if($this->db->inTransaction())$this->db->rollBack();throw $e;}
+    }
+    /** Derive next number from the authenticated history, never from an unverified counter.
+     * Historical gaps remain untouched and require review before allocating any new number.
+     */
+    private static function nextNumber(array $rows,array $candidate):string {
+        $last=0;$latest=null;
+        foreach($rows as $row){
+            $d=$row['document'];
+            if([$d['year'],$d['premise'],$d['register']]!==[$candidate['year'],$candidate['premise'],$candidate['register']])continue;
+            if($d['number']!==(string)($last+1))throw new DomainException('Historical numbering requires reconciliation.');
+            $last++;
+            $latest=DateTimeImmutable::createFromFormat('!d.m.Y H:i:s',$d['issuedAt'],new DateTimeZone('Europe/Zagreb'));
+        }
+        $issued=DateTimeImmutable::createFromFormat('!d.m.Y H:i:s',$candidate['issuedAt'],new DateTimeZone('Europe/Zagreb'));
+        if($latest!==null&&$issued<$latest)throw new DomainException('Issue timestamp precedes prior invoice.');
+        if($last>=999999999)throw new DomainException('Numbering exhausted.');
+        return (string)($last+1);
     }
     private static function money(int $cents):string {return intdiv($cents,100).'.'.str_pad((string)($cents%100),2,'0',STR_PAD_LEFT);}
     public static function unsigned(array $d,string $zki):string {
