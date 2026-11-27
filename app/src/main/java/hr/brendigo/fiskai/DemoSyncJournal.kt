@@ -46,9 +46,11 @@ internal class DemoSyncJournal(context:Context,private val db:RecordDatabase=Rec
         check(directory.isDirectory||directory.mkdirs())
         val file=AtomicFile(File(directory,id+".checkpoint"))
         val previous=read(file,id,subject)
-        val matched=DemoSyncClient.reconcile(local,remote,previous)
-        write(file,id,subject,remote)
-        Result(matched,remote.size-matched,remote.size)
+        val candidate=DemoSyncClient.snapshot(subject,JSONObject().put("protocol",1).put("subjectId",subject)
+            .put("status","DEMO_METADATA_SNAPSHOT").put("events",JSONArray(remote)))
+        val matched=DemoSyncClient.reconcile(local,candidate,previous)
+        write(file,id,subject,candidate)
+        Result(matched,candidate.size-matched,candidate.size)
     }
     /** Pull, check prior state, push, then obtain a complete confirmation. No fiscal submission. */
     fun synchronize(url:String,subject:String,owner:String,token:String,local:List<JSONObject>):Result {
