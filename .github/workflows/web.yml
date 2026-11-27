@@ -37,6 +37,7 @@ jobs:
       - uses: actions/checkout@v7
       - run: php -v && php -m
       - run: find web server -name '*.php' -print0 | xargs -0 -n1 php -l
+      - run: php server/tests/LegalComplianceTest.php
       - run: php server/tests/PriceListsTest.php
       - run: php server/tests/PriceDownloadTest.php
       - run: php server/tests/DatabaseTest.php
