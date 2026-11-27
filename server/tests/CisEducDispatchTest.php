@@ -33,6 +33,12 @@ $s=$db->prepare('SELECT COUNT(*) FROM cis_educ_response_evidence WHERE message_i
 $s->execute([$newMessage]);dispatchCheck((int)$s->fetchColumn()===0);
 $s=$db->prepare('SELECT sealed_request FROM cis_educ_dispatch WHERE message_id=?');
 $s->execute([$message]);dispatchCheck(!str_contains($s->fetchColumn(),'RacunZahtjev'));
+// A separately recorded or partially recorded response must prevent dispatch.
+$s=$db->prepare('UPDATE cis_educ_response_evidence SET response_sha256=? WHERE message_id=?');
+$s->execute([hash('sha256','fixture inconsistent response'),$message]);
+dispatchReject(DomainException::class,fn()=>$dispatch->reserve($subject,$message,$storageKey));
+dispatchReject(DomainException::class,fn()=>$prepareDispatch($invoice));
+$s->execute([null,$message]);
 $reserved=$dispatch->reserve($subject,$message,$storageKey);
 dispatchCheck($reserved['soap']===$original&&$reserved['requestSha256']===hash('sha256',$original));
 dispatchReject(DomainException::class,fn()=>$dispatch->reserve($subject,$message,$storageKey));
