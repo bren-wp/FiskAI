@@ -41,16 +41,16 @@ final class F2KpdRelease {
                 $insert=$db->prepare('INSERT INTO f2_kpd_code(revision,code,name_hr) VALUES (?,?,?)');
                 foreach($rows as $code=>$name)$insert->execute([$revision,$code,$name]);
             }
-            self::verified($db,$date,$approvedSha);
+            self::verified($db,$date,$approvedSha,$digest);
             $db->commit();return $revision;
         }catch(Throwable $e){if($db->inTransaction())$db->rollBack();throw $e;}
     }
     /** External approved source hash is independent of database contents. */
-    public static function verified(PDO $db,string $date,string $approvedSha):array {
+    public static function verified(PDO $db,string $date,string $approvedSha,string $approvedCatalogSha):array {
         $revision=self::revision($date);
         $s=$db->prepare('SELECT source_sha256,catalog_sha256 FROM f2_kpd_release WHERE revision=?');
         $s->execute([$revision]);$stored=$s->fetch(PDO::FETCH_ASSOC);
-        if(!$stored||!hash_equals($approvedSha,$stored['source_sha256']))throw new DomainException('Approved KPD release unavailable.');
+        if(!$stored||!hash_equals($approvedSha,$stored['source_sha256'])||!hash_equals($approvedCatalogSha,$stored['catalog_sha256']))throw new DomainException('Approved KPD release unavailable.');
         $s=$db->prepare('SELECT code,name_hr FROM f2_kpd_code WHERE revision=? ORDER BY code LIMIT 20001');
         $s->execute([$revision]);$rows=[];
         while($r=$s->fetch(PDO::FETCH_ASSOC))$rows[$r['code']]=$r['name_hr'];
