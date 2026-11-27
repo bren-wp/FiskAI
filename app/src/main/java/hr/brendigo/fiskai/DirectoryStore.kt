@@ -10,7 +10,7 @@ data class Contact(val id: String = UUID.randomUUID().toString(), val name: Stri
 data class Product(val id: String = UUID.randomUUID().toString(), val name: String, val code: String, val price: BigDecimal, val vat: BigDecimal, val service: Boolean)
 
 class DirectoryStore(context: Context) {
-    private val prefs = context.getSharedPreferences("fiskai_directory", Context.MODE_PRIVATE)
+    private val prefs = SecureRecords(context, "fiskai_directory")
     private fun read(key: String) = JSONArray(prefs.getString(key, "[]") ?: "[]")
     fun contacts(): List<Contact> {
         val arr = read("contacts")
@@ -23,11 +23,11 @@ class DirectoryStore(context: Context) {
     fun saveContacts(items: List<Contact>): Boolean {
         val arr = JSONArray()
         items.forEach { arr.put(JSONObject().put("id", it.id).put("name", it.name).put("oib", it.oib).put("email", it.email).put("supplier", it.supplier)) }
-        return prefs.edit().putString("contacts", arr.toString()).commit()
+        return prefs.write("contacts", arr.toString())
     }
     fun saveProducts(items: List<Product>): Boolean {
         val arr = JSONArray()
         items.forEach { arr.put(JSONObject().put("id", it.id).put("name", it.name).put("code", it.code).put("price", it.price.toPlainString()).put("vat", it.vat.toPlainString()).put("service", it.service)) }
-        return prefs.edit().putString("products", arr.toString()).commit()
+        return prefs.write("products", arr.toString())
     }
 }

@@ -10,7 +10,7 @@ data class Draft(val id: String = UUID.randomUUID().toString(), val kind: String
     val total: BigDecimal get() = lines.fold(BigDecimal.ZERO) { acc, line -> acc + line.total }
 }
 class DraftStore(context: Context) {
-    private val prefs = context.getSharedPreferences("fiskai_drafts", Context.MODE_PRIVATE)
+    private val prefs = SecureRecords(context, "fiskai_drafts")
     fun read(): List<Draft> {
         val arr = JSONArray(prefs.getString("drafts", "[]"))
         return List(arr.length()) { i ->
@@ -29,6 +29,6 @@ class DraftStore(context: Context) {
             draft.lines.forEach { line -> lines.put(JSONObject().put("description", line.description).put("quantity", line.quantity.toPlainString()).put("price", line.unitPrice.toPlainString()).put("vat", line.vatRate.toPlainString())) }
             arr.put(JSONObject().put("id", draft.id).put("kind", draft.kind).put("customer", draft.customer).put("oib", draft.oib).put("lines", lines))
         }
-        return prefs.edit().putString("drafts", arr.toString()).commit()
+        return prefs.write("drafts", arr.toString())
     }
 }

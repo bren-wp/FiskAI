@@ -1,9 +1,5 @@
-# Alpha03 acceptance status
+# Alpha04 acceptance status
 
-Implemented: local directory CRUD, catalog CRUD, duplicate OIB/code checks, draft selection, PDF draft export through SAF, updated stable Android toolchain, dependency update configuration.
+Implemented in source: draft and directory CRUD, PDF export, local company profile, OIB and Croatian IBAN checksum validation, AES-256-GCM record encryption with Android Keystore and legacy migration. SDK 36 compilation and target configured because runner could not resolve platforms;android-37. No dependencies downgraded in this change.
 
-Previous CI failure: sdkmanager legacy tools package. Updated SDK setup action and explicit package selection.
-
-Not yet verified: new Android compilation, device layout, persistent storage integration tests, PDF output on device, 16 KB compatibility and pixel matching.
-
-Not production-ready: plaintext app-private preferences; no issued invoices, fiscalization, signed XML, eInvoice transport, backup or server sync. No actual user certificates or external source code imported. Keep real taxpayer data out of alpha.
+Still required: successful CI and device tests, migration and tamper instrumentation tests, background write handling and transactional database (Room), recoverable encrypted backup, company premises/devices/operators, regulatory integration, actual screenshots and pixel comparison. PDF export produces unencrypted documents at user-selected destination. No issued invoices, fiscalization, signed XML, eInvoice transport, server or release yet. Do not enter real taxpayer data until acceptance.

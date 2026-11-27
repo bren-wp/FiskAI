@@ -35,15 +35,35 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val store = DraftStore(this)
-        setContent { MaterialTheme(colorScheme = lightColorScheme(primary = Blue, background = Surface, surface = Color.White, onSurface = Navy)) { FiskApp(store, DirectoryStore(this)) } }
+        val directory = DirectoryStore(this)
+        val businessStore = BusinessStore(this)
+        setContent {
+            MaterialTheme(colorScheme = lightColorScheme(primary = Blue, background = Surface, surface = Color.White, onSurface = Navy)) {
+                val loaded by produceState<Result<InitialData>?>(initialValue = null) {
+                    value = withContext(Dispatchers.IO) {
+                        runCatching { InitialData(store.read(), directory.contacts(), directory.products(), businessStore.read()) }
+                    }
+                }
+                val result = loaded
+                when {
+                    result == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                    result.isSuccess -> FiskApp(store, directory, businessStore, result.getOrThrow())
+                    else -> Column(Modifier.fillMaxSize().safeDrawingPadding().padding(24.dp), verticalArrangement = Arrangement.Center) {
+                        Text("Pohrana nije dostupna", style = MaterialTheme.typography.headlineSmall)
+                        Text("Podaci nisu obrisani. Ponovno pokrenite aplikaciju. Ako se problem nastavi, obratite se podršci. Nemojte brisati podatke aplikacije.")
+                    }
+                }
+            }
+        }
     }
 }
 
 @Composable
-private fun FiskApp(store: DraftStore, directory: DirectoryStore) {
-    var items by remember { mutableStateOf(store.read()) }
-    var contacts by remember { mutableStateOf(directory.contacts()) }
-    var products by remember { mutableStateOf(directory.products()) }
+private fun FiskApp(store: DraftStore, directory: DirectoryStore, businessStore: BusinessStore, initial: InitialData) {
+    var items by remember { mutableStateOf(initial.drafts) }
+    var contacts by remember { mutableStateOf(initial.contacts) }
+    var products by remember { mutableStateOf(initial.products) }
+    var business by remember { mutableStateOf(initial.business) }
     var page by remember { mutableStateOf("Početna") }
     var kind by remember { mutableStateOf("Račun") }
     var selected by remember { mutableStateOf<Draft?>(null) }
@@ -103,6 +123,7 @@ private fun FiskApp(store: DraftStore, directory: DirectoryStore) {
                 } }
                 page == "Početna" -> {
                     Text("Pregled poslovanja", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                    if(business.name.isNotBlank()) Text(business.name)
                     Panel { Text("Vrijednost nacrta"); Text(euro(items.fold(BigDecimal.ZERO) { a, d -> a + d.total }), fontSize = 30.sp, fontWeight = FontWeight.Bold, color = Blue); Text("Nije ostvareni promet", color = Color.DarkGray) }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(onClick = { create("Račun") }, modifier = Modifier.weight(1f)) { Text("Novi račun") }
@@ -129,12 +150,15 @@ private fun FiskApp(store: DraftStore, directory: DirectoryStore) {
                 page == "Proizvodi i usluge" -> ProductScreen(products) { next ->
                     directory.saveProducts(next).also { if(it) products = next }
                 }
+                page == "Poslovni subjekt" -> BusinessScreen(business) { next ->
+                    businessStore.save(next).also { if(it) business = next }
+                }
                 else -> {
                     Text("Više", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    listOf("Kupci", "Dobavljači", "Proizvodi i usluge").forEach { destination ->
+                    listOf("Kupci", "Dobavljači", "Proizvodi i usluge", "Poslovni subjekt").forEach { destination ->
                         OutlinedButton(onClick = { page = destination }, modifier = Modifier.fillMaxWidth()) { Text(destination) }
                     }
-                    Panel { Text("Lokalna pohrana"); Text("Nacrti se čuvaju na ovom uređaju. Fiskalizacija i eRačuni još nisu dostupni.") }
+                    Panel { Text("Lokalna pohrana"); Text("Lokalni zapisi zaštićeni su ključem ovog uređaja. Fiskalizacija i eRačuni još nisu dostupni.") }
                     Panel { Text("FiskAI"); Text("Računi i ponude") }
                 }
             }

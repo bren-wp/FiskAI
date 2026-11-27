@@ -19,11 +19,12 @@ jobs:
           gradle-version: '9.9.2'
       - uses: android-actions/setup-android@v4.0.4
         with:
-          packages: "platform-tools platforms;android-37 build-tools;36.0.0"
+          packages: "platform-tools platforms;android-36 build-tools;36.0.0"
       - run: gradle :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:bundleDebug
       - uses: actions/upload-artifact@v6
         with:
           name: FiskAI-alpha
+          if-no-files-found: error
           path: |
             app/build/outputs/apk/debug/*.apk
             app/build/outputs/bundle/debug/*.aab
