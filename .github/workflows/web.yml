@@ -47,6 +47,7 @@ jobs:
       - run: php server/tests/SchemaMigratorTest.php
       - run: php server/tests/FiscalEventOutboxTest.php
       - run: php server/tests/DemoSyncTest.php
+      - run: php server/tests/DemoDeviceProofTest.php
       - run: php server/tests/FiscalContractTest.php
       - run: php server/tests/FiscalSignatureTest.php
       - name: Install XML signature verifier from official Ubuntu sources
