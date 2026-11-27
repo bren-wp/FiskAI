@@ -3,6 +3,12 @@ package hr.brendigo.fiskai
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -42,6 +48,25 @@ private fun FiskApp(store: DraftStore, directory: DirectoryStore) {
     var kind by remember { mutableStateOf("Račun") }
     var selected by remember { mutableStateOf<Draft?>(null) }
     var error by remember { mutableStateOf("") }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var exporting by remember { mutableStateOf(false) }
+    var exportTarget by remember { mutableStateOf<Draft?>(null) }
+    var exportStatus by remember { mutableStateOf("") }
+    val pdfPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) { uri ->
+        val target = exportTarget
+        exportTarget = null
+        if(uri != null && target != null) {
+            exporting = true
+            scope.launch {
+                val result = withContext(Dispatchers.IO) {
+                    runCatching { context.contentResolver.openOutputStream(uri, "wt")?.use { DraftPdf.write(target, it) } ?: error("Datoteka nije dostupna.") }
+                }
+                exporting = false
+                exportStatus = if(result.isSuccess) "PDF nacrt je spremljen." else "Spremanje PDF-a nije uspjelo."
+            }
+        }
+    }
     fun create(type: String) { kind = type; page = "Novi"; selected = null; error = "" }
     Scaffold(
         topBar = { Row(Modifier.fillMaxWidth().background(Navy).statusBarsPadding().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -65,6 +90,12 @@ private fun FiskApp(store: DraftStore, directory: DirectoryStore) {
                     draft.lines.forEach { line -> Panel { Text(line.description, fontWeight = FontWeight.Bold); Text(line.quantity.toPlainString() + " × " + euro(line.unitPrice)); Text(euro(line.total)) } }
                     Panel { Text("Ukupno", fontWeight = FontWeight.Bold); Text(euro(draft.total), fontSize = 26.sp) }
                     Text("Dokument nije izdan niti fiskaliziran.")
+                    OutlinedButton(enabled = !exporting && exportTarget == null, onClick = {
+                        exportStatus = ""
+                        exportTarget = draft
+                        pdfPicker.launch("FiskAI-nacrt-" + draft.id.take(8) + ".pdf")
+                    }, modifier = Modifier.fillMaxWidth()) { Text(if(exporting) "Spremanje…" else "Izvezi PDF nacrt") }
+                    if(exportStatus.isNotEmpty()) Text(exportStatus)
                 }
                 page == "Novi" -> key(kind) { DraftForm(kind, error, contacts.filter { !it.supplier }, products) { draft ->
                     val updated = items + draft
