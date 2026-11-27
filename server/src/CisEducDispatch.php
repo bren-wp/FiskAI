@@ -3,6 +3,7 @@ declare(strict_types=1);
 require_once __DIR__.'/CisEducRequestPreparation.php';
 require_once __DIR__.'/CisEducResponseEvidence.php';
 require_once __DIR__.'/CisEducHttpsTransport.php';
+require_once __DIR__.'/EducBusinessLedger.php';
 
 /** EDUC lifecycle. External transport disabled unless explicitly authorized; no PROD support.
  * Caller must provide trusted immutable domain document and independently approved pins.
@@ -44,7 +45,15 @@ final class CisEducDispatch {
         if($soap===false||!hash_equals($r['request_sha256'],hash('sha256',$soap)))throw new RuntimeException('Request authentication failed.');
         return $soap;
     }
-    /** Prepare from unsigned XML; never accept an arbitrary caller-supplied signed blob. */
+    /** Authoritative document path; hashes and XML are derived internally from authenticated storage. */
+    public function prepareFromLedger(string $subject,string $document,OpenSSLAsymmetricKey $signingKey,
+        OpenSSLCertificate $cert,string $signerPin,string $responsePin,string $schemaDir,string $storageKey):string {
+        $entry=(new EducBusinessLedger($this->db))->read($subject,$document,$storageKey);
+        $d=$entry['document'];
+        return $this->prepare($subject,$document,$entry['digest'],EducBusinessLedger::request($d,$signingKey),
+            $d['ownerOib'],$signingKey,$cert,$signerPin,$responsePin,$schemaDir,$entry['keyId'],$storageKey);
+    }
+    /** Legacy offline preparation; unbound requests may not enter authorized transport. */
     public function prepare(string $subject,string $document,string $documentHash,string $unsigned,string $oib,
         OpenSSLAsymmetricKey $signingKey,OpenSSLCertificate $cert,string $signerPin,string $responsePin,
         string $schemaDir,string $keyId,string $storageKey):string {
@@ -119,6 +128,11 @@ final class CisEducDispatch {
         OpenSSLCertificate $trusted,string $schemaDir,string $storageKey):string {
         $r=$this->row($subject,$message);
         CisEducHttpsTransport::authorize($subject,$signer,$trusted,$r['signer_sha256'],$r['trust_sha256']);
+        $entry=(new EducBusinessLedger($this->db))->read($subject,$r['document_id'],$storageKey);
+        if($entry['digest']!==$r['document_sha256']||$entry['keyId']!==$r['key_id']||
+            $entry['document']['messageId']!==$message||$entry['document']['ownerOib']!==getenv('FISKAI_CIS_EDUC_AUTHORIZED_OIB'))
+            throw new DomainException('Dispatch document binding mismatch.');
+        EducBusinessLedger::assertBound($entry['document'],self::decrypt($r,$storageKey),$signer);
         $reserved=$this->reserve($subject,$message,$storageKey);
         try{
             $soap=CisEducHttpsTransport::post($subject,$reserved['soap'],$signer,$trusted,$r['signer_sha256'],$r['trust_sha256']);
