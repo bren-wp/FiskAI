@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require_once __DIR__.'/CisEducRequestPreparation.php';
 require_once __DIR__.'/EducInvoiceMath.php';
+require_once __DIR__.'/EducCreditLimits.php';
 
 /** Bounded, authenticated ledger for a narrow ordinary F1 EDUC invoice profile.
  * Not a production issuance or tax determination engine.
@@ -63,9 +64,9 @@ final class EducBusinessLedger {
     private static function normalizeV2(array $input,string $oib):array {
         $fields=['schemaVersion','documentId','messageId','issuedAt','number','premise','register','operatorOib','payment','kind','correctionOf','lines'];
         if(count($input)!==count($fields)||array_diff($fields,array_keys($input))||$input['schemaVersion']!==2||
-            !in_array($input['kind'],['INVOICE','CREDIT'],true)||!is_array($input['lines']))
+            !in_array($input['kind'],['INVOICE','CREDIT','PARTIAL_CREDIT'],true)||!is_array($input['lines']))
             throw new InvalidArgumentException('Invalid version 2 invoice.');
-        if($input['kind']==='CREDIT'){
+        if($input['kind']!=='INVOICE'){
             if(!is_string($input['correctionOf']))throw new InvalidArgumentException('Original document required.');
             self::uuid($input['correctionOf']);
         }elseif($input['correctionOf']!==null)throw new InvalidArgumentException('Unexpected correction reference.');
@@ -73,29 +74,35 @@ final class EducBusinessLedger {
         $common=array_intersect_key($input,array_flip(['documentId','messageId','issuedAt','number','premise','register','operatorOib','payment']));
         $legacy=self::normalize($common+['netCents'=>$math['netCents'],'rate'=>25],$oib);
         $row=[];foreach($fields as $field)$row[$field]=$field==='lines'?$math['lines']:$input[$field];
-        $sign=$input['kind']==='CREDIT'?-1:1;
+        $sign=$input['kind']==='INVOICE'?1:-1;
         $groups=$math['vatBreakdown'];
         foreach($groups as &$group){$group['netCents']*=$sign;$group['taxCents']*=$sign;}unset($group);
         return $row+['ownerOib'=>$oib,'netCents'=>$sign*$math['netCents'],'discountCents'=>$sign*$math['discountCents'],
             'taxCents'=>$sign*$math['taxCents'],'totalCents'=>$sign*$math['totalCents'],'vatBreakdown'=>$groups,'year'=>$legacy['year']];
     }
-    /** Full reversal only. Original stays immutable; one credit per original. */
+    /** Corrections reference the original, never a correction. Limits are replayed on read/restore. */
     private static function validateCorrection(array $doc,array $prior):void {
-        if(($doc['kind']??null)!=='CREDIT')return;
-        $original=null;
+        if(!in_array($doc['kind']??null,['CREDIT','PARTIAL_CREDIT'],true))return;
+        $original=null;$credits=[];
         foreach($prior as $entry){
             $d=$entry['document'];
             if($d['documentId']===$doc['correctionOf'])$original=$d;
-            if(($d['kind']??null)==='CREDIT'&&$d['correctionOf']===$doc['correctionOf'])
-                throw new DomainException('Original already credited.');
+            if(in_array($d['kind']??null,['CREDIT','PARTIAL_CREDIT'],true)&&$d['correctionOf']===$doc['correctionOf']){
+                if($d['kind']==='CREDIT'||$doc['kind']==='CREDIT')throw new DomainException('Original already credited.');
+                $credits[]=$d;
+            }
         }
         if(!$original||($original['schemaVersion']??null)!==2||$original['kind']!=='INVOICE'||
-            $original['lines']!==$doc['lines']||$original['payment']!==$doc['payment']||
-            $original['ownerOib']!==$doc['ownerOib']||$original['totalCents']!==-$doc['totalCents'])
-            throw new DomainException('Credit must reverse an existing version 2 invoice exactly.');
-        $before=DateTimeImmutable::createFromFormat('!d.m.Y H:i:s',$original['issuedAt'],new DateTimeZone('Europe/Zagreb'));
+            $original['payment']!==$doc['payment']||$original['ownerOib']!==$doc['ownerOib'])
+            throw new DomainException('Correction must reference an existing version 2 invoice.');
+        if($doc['kind']==='CREDIT'&&($original['lines']!==$doc['lines']||$original['totalCents']!==-$doc['totalCents']))
+            throw new DomainException('Full credit must reverse original exactly.');
         $after=DateTimeImmutable::createFromFormat('!d.m.Y H:i:s',$doc['issuedAt'],new DateTimeZone('Europe/Zagreb'));
-        if($after<$before)throw new DomainException('Credit precedes original.');
+        foreach([$original,...$credits] as $previous){
+            $before=DateTimeImmutable::createFromFormat('!d.m.Y H:i:s',$previous['issuedAt'],new DateTimeZone('Europe/Zagreb'));
+            if($after<$before)throw new DomainException('Credit precedes original or earlier credit.');
+        }
+        if($doc['kind']==='PARTIAL_CREDIT')EducCreditLimits::check($original,[...$credits,$doc]);
     }
     private static function aad(array $r,string $keyId):string {
         return implode("\0",['FiskAI:EDUC:document:v1',$r['subject_id'],$r['document_id'],$r['message_id'],(string)$r['chain_position'],
@@ -264,7 +271,7 @@ final class EducBusinessLedger {
     private static function money(int $cents):string {return intdiv($cents,100).'.'.str_pad((string)($cents%100),2,'0',STR_PAD_LEFT);}
     public static function unsigned(array $d,string $zki):string {
         if(!preg_match('/\A[0-9a-f]{32}\z/D',$zki))throw new InvalidArgumentException('Invalid ZKI.');
-        if(($d['kind']??null)==='CREDIT')throw new LogicException('Credit fiscal transport not supported.');
+        if(in_array($d['kind']??null,['CREDIT','PARTIAL_CREDIT'],true))throw new LogicException('Credit fiscal transport not supported.');
         $groups=$d['vatBreakdown']??[['rate'=>$d['rate'],'netCents'=>$d['netCents'],'taxCents'=>$d['taxCents']]];
         $vat='<f:Pdv>';
         foreach($groups as $g)$vat.='<f:Porez><f:Stopa>'.$g['rate'].'.00</f:Stopa><f:Osnovica>'.self::money($g['netCents']).'</f:Osnovica><f:Iznos>'.self::money($g['taxCents']).'</f:Iznos></f:Porez>';
@@ -274,7 +281,7 @@ final class EducBusinessLedger {
         return '<f:RacunZahtjev xmlns:f="'.self::NS.'" Id="RacunZahtjev"><f:Zaglavlje><f:IdPoruke>'.$d['messageId'].'</f:IdPoruke><f:DatumVrijeme>'.$date.'</f:DatumVrijeme></f:Zaglavlje><f:Racun><f:Oib>'.$d['ownerOib'].'</f:Oib><f:USustPdv>true</f:USustPdv><f:DatVrijeme>'.$date.'</f:DatVrijeme><f:OznSlijed>N</f:OznSlijed><f:BrRac><f:BrOznRac>'.$d['number'].'</f:BrOznRac><f:OznPosPr>'.$d['premise'].'</f:OznPosPr><f:OznNapUr>'.$d['register'].'</f:OznNapUr></f:BrRac>'.$vat.'<f:IznosUkupno>'.self::money($d['totalCents']).'</f:IznosUkupno><f:NacinPlac>'.$d['payment'].'</f:NacinPlac><f:OibOper>'.$d['operatorOib'].'</f:OibOper><f:ZastKod>'.$zki.'</f:ZastKod><f:NakDost>false</f:NakDost></f:Racun></f:RacunZahtjev>';
     }
     public static function request(array $d,OpenSSLAsymmetricKey $key):string {
-        if(($d['kind']??null)==='CREDIT')throw new LogicException('Credit fiscal transport not supported.');
+        if(in_array($d['kind']??null,['CREDIT','PARTIAL_CREDIT'],true))throw new LogicException('Credit fiscal transport not supported.');
         return self::unsigned($d,CisEducRequestPreparation::zki($d['ownerOib'],$d['issuedAt'],$d['number'],$d['premise'],$d['register'],self::money($d['totalCents']),$key));
     }
     /** Check the entire unsigned request against the authoritative document and verify its XML signature. */
