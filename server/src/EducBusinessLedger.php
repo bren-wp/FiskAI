@@ -62,6 +62,9 @@ final class EducBusinessLedger {
         return implode("\0",['FiskAI:EDUC:document:v1',$r['subject_id'],$r['document_id'],$r['message_id'],(string)$r['chain_position'],
             (string)$r['fiscal_year'],$r['premise'],$r['register_no'],$r['invoice_no'],$r['document_sha256'],$r['previous_mac'],$keyId]);
     }
+    private static function headMac(array $scope,int $position,string $last,string $mac):string {
+        return hash_hmac('sha256',implode("\0",['FiskAI:EDUC:head:v1',$scope['subject_id'],$scope['owner_oib'],$scope['key_id'],(string)$position,$last]),$mac);
+    }
     private function checkedRows(array $scope,string $key):array {
         [$enc,$mac]=self::keys($key);
         $s=$this->db->prepare('SELECT * FROM educ_business_document WHERE subject_id=? ORDER BY chain_position LIMIT 1001');
@@ -84,13 +87,26 @@ final class EducBusinessLedger {
             $previous=$r['entry_mac'];
             $result[]=['document'=>$doc,'digest'=>$r['document_sha256'],'mac'=>$previous,'keyId'=>$scope['key_id']];
         }
+        $s=$this->db->prepare('SELECT chain_position,entry_mac,head_mac FROM educ_business_chain_head WHERE subject_id=?');
+        $s->execute([$scope['subject_id']]);$head=$s->fetch(PDO::FETCH_ASSOC);
+        if($head===false){
+            if($result)throw new RuntimeException('Missing chain head.');
+        }elseif((int)$head['chain_position']!==count($result)||$head['entry_mac']!==$previous||
+            !hash_equals($head['head_mac'],self::headMac($scope,count($result),$previous,$mac)))
+            throw new RuntimeException('Chain head authentication failed.');
         return $result;
     }
     public function read(string $subject,string $document,string $storageKey):array {
         self::uuid($document);
-        foreach($this->checkedRows($this->subject($subject,false),$storageKey) as $row)
-            if($row['document']['documentId']===$document)return $row;
-        throw new DomainException('Unknown document.');
+        $own=!$this->db->inTransaction();
+        if($own)$this->db->beginTransaction();
+        try{
+            $rows=$this->checkedRows($this->subject($subject,true),$storageKey);
+            foreach($rows as $row)if($row['document']['documentId']===$document){
+                if($own)$this->db->commit();return $row;
+            }
+            throw new DomainException('Unknown document.');
+        }catch(Throwable $e){if($own&&$this->db->inTransaction())$this->db->rollBack();throw $e;}
     }
     public function append(string $subject,array $input,string $storageKey):array {
         if($this->db->inTransaction())throw new LogicException('Own transaction required.');
@@ -123,6 +139,9 @@ final class EducBusinessLedger {
             $r['sealed_document']=base64_encode($nonce.$tag.$cipher);
             $s=$this->db->prepare('INSERT INTO educ_business_document ('.implode(',',array_keys($r)).') VALUES ('.implode(',',array_fill(0,count($r),'?')).')');
             $s->execute(array_values($r));
+            $head=self::headMac($scope,$r['chain_position'],$r['entry_mac'],$mac);
+            $s=$this->db->prepare('INSERT INTO educ_business_chain_head(subject_id,chain_position,entry_mac,head_mac) VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE chain_position=VALUES(chain_position),entry_mac=VALUES(entry_mac),head_mac=VALUES(head_mac)');
+            $s->execute([$subject,$r['chain_position'],$r['entry_mac'],$head]);
             $this->db->commit();
             return ['document'=>$doc,'digest'=>$digest,'mac'=>$r['entry_mac'],'keyId'=>$scope['key_id']];
         }catch(Throwable $e){if($this->db->inTransaction())$this->db->rollBack();throw $e;}
