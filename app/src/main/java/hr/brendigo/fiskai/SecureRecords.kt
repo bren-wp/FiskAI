@@ -22,6 +22,61 @@ internal class SecureRecords(
         private const val ALIAS = "fiskai.local.records.v1"
         private const val PREFIX = "gcm1:"
         private val lock = Any()
+        private data class BackupRecord(val namespace:String,val name:String,val empty:String) {
+            val id get()="$namespace/$name"
+        }
+        private val backupRecords=listOf(
+            BackupRecord("fiskai_drafts","drafts","[]"),
+            BackupRecord("fiskai_directory","contacts","[]"),
+            BackupRecord("fiskai_directory","products","[]"),
+            BackupRecord("fiskai_business","profile","{}"),
+            BackupRecord("fiskai_fiscal_setup","settings","{}")
+        )
+
+        internal fun exportWorkspace(context:Context,database:RecordDatabase=RecordDatabase.shared(context)):String = synchronized(lock) {
+            val records=org.json.JSONObject()
+            for(item in backupRecords) {
+                val value=SecureRecords(context,item.namespace,database).getString(item.name,item.empty)
+                records.put(item.id,org.json.JSONTokener(value).nextValue())
+            }
+            org.json.JSONObject().put("version",1).put("demo",BuildConfig.DEMO_MODE).put("records",records).toString()
+        }
+
+        // Import a partial workspace, not a fiscal ledger. Never overwrite existing records.
+        internal fun restoreWorkspace(context:Context,json:String,database:RecordDatabase=RecordDatabase.shared(context)) = synchronized(lock) {
+            val root=org.json.JSONObject(json)
+            require(root.keys().asSequence().toSet()==setOf("version","demo","records"))
+            require(root.getInt("version")==1 && root.getBoolean("demo")==BuildConfig.DEMO_MODE)
+            val payload=root.getJSONObject("records")
+            require(payload.keys().asSequence().toSet()==backupRecords.map { it.id }.toSet())
+            val incoming=backupRecords.map { item ->
+                val value=payload.get(item.id)
+                require(if(item.empty=="[]") value is org.json.JSONArray else value is org.json.JSONObject)
+                val target=SecureRecords(context,item.namespace,database)
+                val encoded=value.toString()
+                target.validateJson(encoded)
+                Triple(item,target,encoded)
+            }
+            // Validate imported domain objects with the same decoders used by live storage.
+            WorkspaceValidation.validate(payload)
+            // Migrate old preferences first, so an unmigrated existing record cannot be overwritten.
+            for((item,target,_) in incoming) require(target.getString(item.name,item.empty)==item.empty)
+            val sealed=incoming.map { (item,target,encoded) -> item to target.encrypt(item.name,encoded) }
+            val sql=database.writableDatabase
+            sql.beginTransaction()
+            try {
+                for(table in listOf("demo_receipt","demo_sequence","stock_event","stock_balance","cis_echo")) {
+                    sql.rawQuery("SELECT 1 FROM "+table+" LIMIT 1",null).use { require(!it.moveToFirst()) }
+                }
+                // Refuse unknown records, including certificates, instead of overwriting them.
+                sql.query("records",arrayOf("namespace","record_key"),null,null,null,null,null).use { cursor ->
+                    while(cursor.moveToNext()) require(backupRecords.any { it.namespace==cursor.getString(0)&&it.name==cursor.getString(1) })
+                }
+                for((item,encrypted) in sealed) database.write(item.namespace,item.name,encrypted)
+                sql.setTransactionSuccessful()
+            } finally { sql.endTransaction() }
+        }
+
         private fun key(create: Boolean): SecretKey = synchronized(lock) {
             val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
             val existing = store.getKey(ALIAS, null)

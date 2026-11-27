@@ -11,8 +11,9 @@ data class Draft(val id: String = UUID.randomUUID().toString(), val kind: String
 }
 class DraftStore(context: Context) {
     private val prefs = SecureRecords(context, "fiskai_drafts")
-    fun read(): List<Draft> {
-        val arr = JSONArray(prefs.getString("drafts", "[]"))
+    fun read(): List<Draft> = decode(JSONArray(prefs.getString("drafts", "[]")))
+    companion object {
+    internal fun decode(arr: JSONArray): List<Draft> {
         return List(arr.length()) { i ->
             val item = arr.getJSONObject(i)
             val lines = item.getJSONArray("lines")
@@ -21,6 +22,7 @@ class DraftStore(context: Context) {
                 Line(row.getString("description"), BigDecimal(row.getString("quantity")), BigDecimal(row.getString("price")), BigDecimal(row.getString("vat")),row.optString("kpd"),row.optString("unitCode"))
             })
         }
+    }
     }
     fun save(items: List<Draft>): Boolean {
         val arr = JSONArray()

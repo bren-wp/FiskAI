@@ -48,7 +48,7 @@ class MainActivity : ComponentActivity() {
                 val result = loaded
                 when {
                     result == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-                    result.isSuccess -> FiskApp(store, directory, businessStore, fiscalStore, result.getOrThrow())
+                    result.isSuccess -> FiskApp(store, directory, businessStore, fiscalStore, result.getOrThrow()) { recreate() }
                     else -> Column(Modifier.fillMaxSize().safeDrawingPadding().padding(24.dp), verticalArrangement = Arrangement.Center) {
                         Text("Pohrana nije dostupna", style = MaterialTheme.typography.headlineSmall)
                         Text("Podaci nisu obrisani. Ponovno pokrenite aplikaciju. Ako se problem nastavi, obratite se podršci. Nemojte brisati podatke aplikacije.")
@@ -60,12 +60,13 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun FiskApp(store: DraftStore, directory: DirectoryStore, businessStore: BusinessStore, fiscalStore: FiscalSetupStore, initial: InitialData) {
+private fun FiskApp(store: DraftStore, directory: DirectoryStore, businessStore: BusinessStore, fiscalStore: FiscalSetupStore, initial: InitialData, onRestored: () -> Unit) {
     var items by remember { mutableStateOf(initial.drafts) }
     var contacts by remember { mutableStateOf(initial.contacts) }
     var products by remember { mutableStateOf(initial.products) }
     var business by remember { mutableStateOf(initial.business) }
     var page by remember { mutableStateOf("Početna") }
+    var backupBusy by remember { mutableStateOf(false) }
     var kind by remember { mutableStateOf("Račun") }
     var selected by remember { mutableStateOf<Draft?>(null) }
     var error by remember { mutableStateOf("") }
@@ -117,7 +118,7 @@ private fun FiskApp(store: DraftStore, directory: DirectoryStore, businessStore:
         } },
         bottomBar = { NavigationBar(containerColor = Color.White) {
             listOf("Početna" to "⌂", "Računi" to "≡", "Novi" to "+", "Ponude" to "▤", "Više" to "···").forEach { (label, glyph) ->
-                NavigationBarItem(selected = page == label, onClick = { selected = null; error = ""; if(label == "Novi") create("Račun") else page = label }, icon = { Text(glyph, fontSize = 23.sp) }, label = { Text(label, fontSize = 11.sp) })
+                NavigationBarItem(selected = page == label, enabled = !backupBusy, onClick = { selected = null; error = ""; if(label == "Novi") create("Račun") else page = label }, icon = { Text(glyph, fontSize = 23.sp) }, label = { Text(label, fontSize = 11.sp) })
             }
         } }
     ) { padding ->
@@ -181,6 +182,7 @@ private fun FiskApp(store: DraftStore, directory: DirectoryStore, businessStore:
                 }
                 page == "Poslovni prostori" || page == "Naplatni uređaji" || page == "Operateri" -> FiscalSetupScreen(page, fiscalStore)
                 page == "Platni kodovi" -> PaymentCodesScreen(business)
+                page == "Sigurnosna kopija" -> WorkspaceBackupScreen({ backupBusy=it },onRestored)
                 page == "Skladište" -> InventoryScreen(products.filter { !it.service && !it.archived })
                 page == "POS blagajna" -> PosDraftScreen(products.filterNot { it.archived }, contacts.filterNot { it.supplier }) { draft ->
                     val updated=items+draft
@@ -194,7 +196,7 @@ private fun FiskApp(store: DraftStore, directory: DirectoryStore, businessStore:
                 }
                 else -> {
                     Text("Više", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    listOf("Kupci", "Dobavljači", "Proizvodi i usluge", "Poslovni subjekt", "Poslovni prostori", "Naplatni uređaji", "Operateri", "Certifikati", "Test fiskalizacije", "DEMO računi", "POS blagajna", "Skladište", "Platni kodovi").forEach { destination ->
+                    listOf("Kupci", "Dobavljači", "Proizvodi i usluge", "Poslovni subjekt", "Poslovni prostori", "Naplatni uređaji", "Operateri", "Certifikati", "Test fiskalizacije", "DEMO računi", "POS blagajna", "Skladište", "Platni kodovi", "Sigurnosna kopija").forEach { destination ->
                         OutlinedButton(onClick = { page = destination }, modifier = Modifier.fillMaxWidth()) { Text(destination) }
                     }
                     Panel { Text("Lokalna pohrana"); Text("Lokalni zapisi zaštićeni su ključem ovog uređaja. Fiskalizacija i eRačuni još nisu dostupni.") }
