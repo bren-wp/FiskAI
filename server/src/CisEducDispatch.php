@@ -94,7 +94,13 @@ final class CisEducDispatch {
         return $this->transaction(function()use($subject,$message,$storageKey,$requireAnchor){
             $r=$this->row($subject,$message,true);
             if($r['state']!=='PREPARED'||self::hasResponse($r))throw new DomainException('Already reserved or resolved.');
-            if($requireAnchor)EducExternalCheckpoint::requireLatest((new EducBusinessLedger($this->db))->checkpoint($subject,$storageKey));
+            if($requireAnchor){
+                $ledger=new EducBusinessLedger($this->db);
+                foreach($ledger->verifySubject($subject,$storageKey) as $entry)
+                    if(($entry['document']['kind']??null)==='CREDIT')
+                        throw new LogicException('Credit reconciliation required before external dispatch.');
+                EducExternalCheckpoint::requireLatest($ledger->checkpoint($subject,$storageKey));
+            }
             $soap=self::decrypt($r,$storageKey);$token=bin2hex(random_bytes(32));
             $s=$this->db->prepare("UPDATE cis_educ_dispatch SET state='RESERVED',reservation_sha256=?,reserved_at=UTC_TIMESTAMP(6),updated_at=UTC_TIMESTAMP(6) WHERE message_id=? AND subject_id=? AND state='PREPARED'");
             $s->execute([hash('sha256',$token),$message,$subject]);
