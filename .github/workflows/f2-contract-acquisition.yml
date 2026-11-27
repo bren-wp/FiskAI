@@ -9,6 +9,8 @@ on:
       - 'scripts/test-f2-contract-acceptance.py'
       - 'scripts/validate-f2-uploaded.py'
       - 'scripts/test-f2-uploaded.py'
+      - 'scripts/prepare-f2-hr-schematron.py'
+      - 'scripts/run-f2-schematron.py'
   workflow_dispatch:
 permissions:
   contents: read
@@ -102,9 +104,43 @@ jobs:
           fi
           /usr/bin/python3 scripts/test-f2-uploaded.py f2-contract-candidates
           /usr/bin/python3 scripts/validate-f2-uploaded.py f2-contract-candidates > f2-xsd-diagnostics.json
+          /usr/bin/python3 scripts/prepare-f2-hr-schematron.py f2-contract-candidates hr-expanded.sch
+          /usr/bin/python3 -m py_compile scripts/run-f2-schematron.py
       - uses: actions/upload-artifact@v6
         with:
           name: FiskAI-F2-XSD-diagnostics-NOT-APPROVAL
-          path: f2-xsd-diagnostics.json
+          path: |
+            f2-xsd-diagnostics.json
+            hr-expanded.sch
+          if-no-files-found: error
+          retention-days: 7
+  en16931-candidate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          repository: ConnectingEurope/eInvoicing-EN16931
+          ref: 6e35e0ab8b09eb183f7d84b282e24ef95f9f5715
+          persist-credentials: false
+          path: en16931-source
+      - name: Inventory the official pinned release commit without executing stylesheets
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd en16931-source
+          test "$(git rev-parse HEAD)" = 6e35e0ab8b09eb183f7d84b282e24ef95f9f5715
+          test "$(git hash-object ubl/xslt/EN16931-UBL-validation.xslt)" = e2849ece2a6b9d5cdd163f2e7a89a6dc3d43dc8a
+          test "$(git hash-object LICENSE.txt)" = 6881212dba6e221b1b061d2e55da5ca4f40e4e19
+          mkdir ../en16931-candidate
+          git archive --format=zip --output=../en16931-candidate/en16931-ubl-source.zip HEAD ubl LICENSE.txt README.md
+          cp ubl/xslt/EN16931-UBL-validation.xslt LICENSE.txt ../en16931-candidate/
+          cd ../en16931-candidate
+          printf '%s\n' UNREVIEWED_CANDIDATE_ONLY > STATUS.txt
+          sha256sum *.zip *.xslt LICENSE.txt > SHA256SUMS.txt
+      - uses: actions/upload-artifact@v6
+        with:
+          name: FiskAI-EN16931-v1.3.17-UNREVIEWED
+          path: en16931-candidate/
           if-no-files-found: error
           retention-days: 7
