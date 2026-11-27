@@ -9,12 +9,23 @@ android {
         applicationId = "hr.brendigo.fiskai"
         minSdk = 24
         targetSdk = 36
-        versionCode = 13
-        versionName = "0.1.0-alpha13"
+        versionCode = 14
+        versionName = "0.1.0"
+        manifestPlaceholders["appLabel"] = "FiskAI"
+        buildConfigField("boolean", "DEMO_MODE", "false")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
-    buildFeatures { compose = true }
+    buildTypes {
+        create("demo") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".demo"
+            manifestPlaceholders["appLabel"] = "FiskAI DEMO"
+            buildConfigField("boolean", "DEMO_MODE", "true")
+            matchingFallbacks += listOf("debug")
+        }
+    }
+    buildFeatures { compose = true; buildConfig = true }
 }
 dependencies {
     implementation(platform("androidx.compose:compose-bom:2026.11.01"))

@@ -14,3 +14,6 @@ PHP web and MySQL/MariaDB price publishing/archive foundation, KPD import/search
 
 ## Alpha13
 Offline request XMLDSig foundation, independent xmlsec verification in CI, Android HTTPS KPD lookup and local UBL draft export. No new external dependency. Certificate authorization, official schema validation, signed response verification, DEMO receipt submission, F2 transport, complete HR-CIUS, actual backend deployment and on-device tests remain pending. Original brand assets and full audits remain open.
+
+## v0.1.0 packaging
+Android remains at app/; public site at web/public; backend, SQL and CLI at server/; vector brand at brending/. Separate demo applicationId and label; standard APK is debug-signed, release AAB unsigned. Release is explicitly a testing prerelease until production gates pass. Original PNG reference transfer, actual screenshots and remaining business/fiscal gates are not complete.

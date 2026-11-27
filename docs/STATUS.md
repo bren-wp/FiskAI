@@ -1,6 +1,3 @@
-# Alpha13 acceptance status
+# v0.1.0 packaging and structure
 
-Alpha12 web CI passed (run 4); Android result checked separately. New code: offline B2C XMLDSig signing foundation and independent xmlsec1 CI verification, Android read-only KPD HTTPS lookup in product editor, units in line snapshots and test UBL XML export. No downgrade of selected Android dependencies. New CI, emulator tests and actual backend connection pending.
-
-Remaining: official contracts and validation, certificate authorization, real ZKI/JIR and authorized DEMO receipt, F2 exchange/provider/eReporting, normalized Room, secure backups, price publication sync and deadline scheduler, POS/inventory, payment codes, KPR/PO-SD, complete web/admin, original branding and real screenshots, full security/dead-code/clone audits, verified release. See ACCEPTANCE.md and XML-UBL.md.
-Added separate API 36 emulator CI for instrumented tests and real screenshot artifact generation. No captured files yet confirmed; do not treat design concepts or the CI configuration as screenshot acceptance.
+Alpha13 web run 8 passed (including offline XML signature verification). Android/device results tracked separately. Reorganized server source, SQL, CLI and tests under server/, public entry points under web/public, vector brand under brending/. Standard/debug and isolated demo APK build type, unsigned release AAB; release pipeline gates on web, Android package and instrumented screenshot workflow. Prerelease, not production stable; no actual release yet verified. Remaining official fiscal contracts, authorization, JIR, F2, Room, backup, complete POS/inventory, payments, KPR/PO-SD, admin, MariaDB and brand acceptance unchanged. Original PNGs not yet imported.

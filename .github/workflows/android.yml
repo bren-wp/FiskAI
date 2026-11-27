@@ -20,11 +20,13 @@ jobs:
       - uses: android-actions/setup-android@v4.0.4
         with:
           packages: "platform-tools platforms;android-37.1 build-tools;36.0.0"
-      - run: gradle --stacktrace :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:bundleDebug
+      - run: gradle --stacktrace :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:bundleDebug :app:assembleDemo :app:bundleRelease
       - uses: actions/upload-artifact@v6
         with:
-          name: FiskAI-alpha
+          name: FiskAI-build
           if-no-files-found: error
           path: |
             app/build/outputs/apk/debug/*.apk
             app/build/outputs/bundle/debug/*.aab
+            app/build/outputs/apk/demo/*.apk
+            app/build/outputs/bundle/release/*.aab

@@ -112,6 +112,7 @@ private fun FiskApp(store: DraftStore, directory: DirectoryStore, businessStore:
         topBar = { Row(Modifier.fillMaxWidth().background(Navy).statusBarsPadding().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("Fisk", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 26.sp)
             Text("AI", color = Color(0xFF48A3FF), fontWeight = FontWeight.Bold, fontSize = 26.sp)
+            if(BuildConfig.DEMO_MODE) Text(" DEMO",color=Color.White,fontWeight=FontWeight.Bold,fontSize=12.sp)
             Spacer(Modifier.weight(1f)); Text(if(page == "Novi") "Novi dokument" else page, color = Color.White)
         } },
         bottomBar = { NavigationBar(containerColor = Color.White) {

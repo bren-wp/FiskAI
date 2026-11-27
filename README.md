@@ -1,4 +1,4 @@
-<p align="center"><img src="branding/banner.svg" alt="FiskAI — Računi, ponude i poslovanje" width="100%"></p>
+<p align="center"><img src="brending/banner.svg" alt="FiskAI — Računi, ponude i poslovanje" width="100%"></p>
 
 # FiskAI
 
@@ -14,7 +14,7 @@ FiskAI je hrvatska Android aplikacija za pripremu računa i ponuda, upravljanje 
 | 🔒 **Privatnost** | Lokalno šifrirani poslovni zapisi. |
 | 🏢 **Poslovne postavke** | Poslovni subjekt, prostori, uređaji i operateri. |
 
-<p align="center"><img src="branding/logo.svg" alt="FiskAI" width="240"></p>
+<p align="center"><img src="brending/logo.svg" alt="FiskAI" width="240"></p>
 
 ## FiskAI Web
 
@@ -23,6 +23,10 @@ Javni pregled aktualnih i arhivskih cjenika, CSV i XML datoteke te pretraživanj
 KPD oznake možete pretražiti i odabrati iz povezanog HTTPS kataloga. Izvoz testnih UBL nacrta omogućuje provjeru strukture dokumenata prije dovršetka eRačun integracije.
 
 [Snimke stvarne aplikacije i testovi na uređaju](https://github.com/bren-wp/FiskAI/actions/workflows/device.yml) — CI artefakti nakon uspješnog izvođenja na emulatoru.
+
+## Preuzimanja
+
+[GitHub Releases](https://github.com/bren-wp/FiskAI/releases) — planirani paketi v0.1.0: instalacijski APK (potpis za testiranje), zasebni DEMO APK i nepotpisani release AAB za kasnije potpisivanje. Izvorni kod obuhvaća Android, web, server i brending.
 
 ## Dostupnost
 
