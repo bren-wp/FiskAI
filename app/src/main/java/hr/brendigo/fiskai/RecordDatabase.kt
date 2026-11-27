@@ -7,7 +7,7 @@ import android.database.sqlite.SQLiteOpenHelper
 
 /** Stores authenticated ciphertext only. No destructive schema fallback. */
 internal class RecordDatabase(context: Context, databaseName: String = "fiskai_records.db") :
-    SQLiteOpenHelper(context.applicationContext, databaseName, null, 9) {
+    SQLiteOpenHelper(context.applicationContext, databaseName, null, 10) {
 
     init { setWriteAheadLoggingEnabled(true) }
 
@@ -34,10 +34,11 @@ internal class RecordDatabase(context: Context, databaseName: String = "fiskai_r
         hr.brendigo.fiskai.room.IncomingSchema.create { db.execSQL(it) }
         hr.brendigo.fiskai.room.ReceiptSchema.create { db.execSQL(it) }
         hr.brendigo.fiskai.room.PaymentPreparationSchema.create { db.execSQL(it) }
+        hr.brendigo.fiskai.room.PaymentPreparationSchema.allowMultiple { db.execSQL(it) }
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        require(oldVersion in 1..8 && newVersion == 9)
+        require(oldVersion in 1..9 && newVersion == 10)
         if(oldVersion == 1) createCisJournal(db)
         if(oldVersion < 3) createDemoLedger(db)
         if(oldVersion < 4) createStock(db)
@@ -46,6 +47,7 @@ internal class RecordDatabase(context: Context, databaseName: String = "fiskai_r
         hr.brendigo.fiskai.room.IncomingSchema.create { db.execSQL(it) }
         hr.brendigo.fiskai.room.ReceiptSchema.create { db.execSQL(it) }
         hr.brendigo.fiskai.room.PaymentPreparationSchema.create { db.execSQL(it) }
+        hr.brendigo.fiskai.room.PaymentPreparationSchema.allowMultiple { db.execSQL(it) }
         // Force Room to validate the upgraded tables before recreating its identity hash.
         db.execSQL("DROP TABLE IF EXISTS room_master_table")
     }
