@@ -3,11 +3,28 @@ declare(strict_types=1);
 require_once __DIR__.'/PriceLists.php';
 require_once __DIR__.'/KpdCatalog.php';
 require_once __DIR__.'/PriceDownload.php';
+require_once __DIR__.'/DemoSync.php';
 header('X-Content-Type-Options: nosniff');
 header('Referrer-Policy: no-referrer');
 try{
     $action=$_GET['action']??'';
     $method=$_SERVER['REQUEST_METHOD'];
+    if($action==='demo-sync'&&$method==='POST'){
+        // Do not trust caller-supplied forwarding headers. TLS must be terminated
+        // locally or the trusted server configuration must establish HTTPS.
+        if(getenv('FISKAI_DEMO_SYNC_ENABLED')!=='1')jsonResponse(['error'=>'Usluga nije dostupna.'],404);
+        if(!in_array(strtolower((string)($_SERVER['HTTPS']??'')),['on','1'],true))jsonResponse(['error'=>'Potreban je HTTPS.'],403);
+        if(strtolower(trim(explode(';',$_SERVER['CONTENT_TYPE']??'',2)[0]))!=='application/json')jsonResponse(['error'=>'Očekuje se JSON.'],415);
+        $auth=$_SERVER['HTTP_AUTHORIZATION']??'';
+        if(!is_string($auth)||!preg_match('/\ABearer [0-9a-f]{64}\z/D',$auth))jsonResponse(['error'=>'Pristup nije odobren.'],401);
+        $body=file_get_contents('php://input',false,null,0,65537);
+        if($body===false||strlen($body)>65536)jsonResponse(['error'=>'Zahtjev je prevelik.'],413);
+        $data=json_decode($body,true,16,JSON_THROW_ON_ERROR);
+        if(!is_array($data))throw new InvalidArgumentException('Neispravan JSON.');
+        try{jsonResponse((new DemoSync(db()))->push($auth,$data));}
+        catch(DemoSyncAuthException $e){jsonResponse(['error'=>'Pristup nije odobren.'],401);}
+        catch(DemoSyncConflict $e){jsonResponse(['error'=>'Sukob zapisa. Lokalni zapisi nisu izmijenjeni.'],409);}
+    }
     if($action==='publish'&&$method==='POST'){
         requirePublisher();
         if(strtolower(trim(explode(';',$_SERVER['CONTENT_TYPE']??'',2)[0]))!=='application/json')jsonResponse(['error'=>'Očekuje se JSON.'],415);
