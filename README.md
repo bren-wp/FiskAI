@@ -22,6 +22,8 @@ Javni pregled aktualnih i arhivskih cjenika, CSV i XML datoteke te pretraživanj
 
 KPD oznake možete pretražiti i odabrati iz povezanog HTTPS kataloga. Izvoz testnih UBL nacrta omogućuje provjeru strukture dokumenata prije dovršetka eRačun integracije.
 
+[Snimke stvarne aplikacije i testovi na uređaju](https://github.com/bren-wp/FiskAI/actions/workflows/device.yml) — CI artefakti nakon uspješnog izvođenja na emulatoru.
+
 ## Dostupnost
 
 Trenutačna verzija namijenjena je testiranju. Dokumenti su nacrti, a fiskalni moduli nisu odobreni za produkcijsko izdavanje računa. Bazne cijene i KPD zahtijevaju provjeru izvora. Slike iznad su vektorski identitet, ne snimke aplikacije.
