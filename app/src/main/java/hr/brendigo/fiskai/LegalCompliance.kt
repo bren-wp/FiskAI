@@ -21,11 +21,12 @@ internal object LegalCompliance {
         val leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)
         val days = when (month) { 2 -> if (leap) 29 else 28; 4, 6, 9, 11 -> 30; else -> 31 }
         require(day in 1..days)
-        val version = when (year) { 2026 -> "HR-F2-2026-v1"; 2027 -> "HR-F2-2027-v1"; else -> null }
-        if (version == null || scope != Scope.STANDARD_DOMESTIC_B2B || subject == Subject.UNKNOWN) {
+        val rule = LegalRuleCatalog.rules[year]
+        val version = rule?.version
+        if (rule == null || scope != Scope.STANDARD_DOMESTIC_B2B || subject == Subject.UNKNOWN) {
             return Decision(version, Obligation.REVIEW_REQUIRED, Obligation.REVIEW_REQUIRED)
         }
-        val issue = if (subject == Subject.VAT || year == 2027) Obligation.REQUIRED else Obligation.NOT_REQUIRED_BY_THIS_RULE
+        val issue = if (if (subject == Subject.VAT) rule.vatIssue else rule.nonVatIssue) Obligation.REQUIRED else Obligation.NOT_REQUIRED_BY_THIS_RULE
         return Decision(version, issue, Obligation.REQUIRED)
     }
 }
