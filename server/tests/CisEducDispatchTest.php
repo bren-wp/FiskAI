@@ -76,3 +76,53 @@ dispatchReject(DomainException::class,fn()=>$dispatch->reserve($subject,$message
 $s=$db->prepare('SELECT event_type FROM cis_educ_dispatch_audit WHERE message_id=? ORDER BY event_type');
 $s->execute([$message]);dispatchCheck($s->fetchAll(PDO::FETCH_COLUMN)===['PREPARED','RESERVED','UNCERTAIN','VERIFIED']);
 echo "Offline EDUC dispatch: encrypted request, single reservation, crash recovery, authenticated response and rollback passed.\n";
+
+if(getenv('FISKAI_CI_RECOVERY_TEST')==='1'){
+    require_once __DIR__.'/../src/CisEducRecovery.php';
+    $pending='93000000-0000-4000-8000-000000000003';
+    $pendingDoc='92000000-0000-4000-8000-000000000003';
+    $pendingZki=CisEducRequestPreparation::zki('12345678903','27.11.2026 09:00:00','2','PP1','1','12.50',$key);
+    $pendingInvoice=str_replace([$message,'<f:BrOznRac>1</f:BrOznRac>',$zki],[$pending,'<f:BrOznRac>2</f:BrOznRac>',$pendingZki],$invoice);
+    dispatchCheck($prepareDispatch($pendingInvoice,$pendingDoc)===$pending);
+    $archiveKey=random_bytes(32);
+    $recovery=new CisEducRecovery($db);
+    $archive=$recovery->export($subject,'dispatch-fixture',$archiveKey,$storageKey);
+    dispatchCheck(!str_contains($archive,'RacunZahtjev')&&!str_contains($archive,$message));
+    dispatchReject(InvalidArgumentException::class,fn()=>$recovery->export($subject,'dispatch-fixture',$storageKey,$storageKey));
+    dispatchReject(InvalidArgumentException::class,fn()=>$recovery->export($subject,'other-key-id',$archiveKey,$storageKey));
+    $dsn=getenv('FISKAI_DB_DSN');
+    $name='fiskai_recovery_test_'.bin2hex(random_bytes(6));
+    $targetDsn=str_replace('dbname=fiskai_test;','dbname='.$name.';',$dsn);
+    if($targetDsn===$dsn)throw new RuntimeException('Expected CI database only.');
+    $db->exec('CREATE DATABASE `'.$name.'` CHARACTER SET utf8mb4');
+    $target=null;
+    try{
+        $target=new PDO($targetDsn,getenv('FISKAI_DB_USER'),getenv('FISKAI_DB_PASSWORD'),[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION,PDO::ATTR_EMULATE_PREPARES=>false]);
+        $target->exec("SET time_zone = '+00:00'");
+        SchemaMigrator::apply($target,__DIR__.'/../database');
+        $restore=new CisEducRecovery($target);
+        putenv('FISKAI_CIS_RECOVERY_MODE=0');
+        dispatchReject(LogicException::class,fn()=>$restore->restore($subject,'dispatch-fixture',$archive,$archiveKey,$storageKey));
+        putenv('FISKAI_CIS_RECOVERY_MODE=1');
+        $changed=$archive;$changed[strlen($changed)-1]=chr(ord($changed[strlen($changed)-1])^1);
+        dispatchReject(InvalidArgumentException::class,fn()=>$restore->restore($subject,'dispatch-fixture',$changed,$archiveKey,$storageKey));
+        dispatchReject(InvalidArgumentException::class,fn()=>$restore->restore($subject,'dispatch-fixture',$archive,random_bytes(32),$storageKey));
+        dispatchReject(RuntimeException::class,fn()=>$restore->restore($subject,'dispatch-fixture',$archive,$archiveKey,random_bytes(32)));
+        dispatchCheck((int)$target->query('SELECT COUNT(*) FROM cis_educ_response_evidence')->fetchColumn()===0);
+        dispatchCheck($restore->restore($subject,'dispatch-fixture',$archive,$archiveKey,$storageKey)===2);
+        $recovered=new CisEducDispatch($target);
+        dispatchCheck($recovered->state($subject,$message)==='VERIFIED');
+        dispatchCheck($recovered->state($subject,$pending)==='UNCERTAIN');
+        dispatchCheck($recovered->open($subject,$message,$storageKey)===$original);
+        dispatchCheck((new CisEducResponseEvidence($target))->open($subject,$message,$storageKey)===$response);
+        dispatchReject(DomainException::class,fn()=>$recovered->reserve($subject,$pending,$storageKey));
+        dispatchReject(DomainException::class,fn()=>$restore->restore($subject,'dispatch-fixture',$archive,$archiveKey,$storageKey));
+        $s=$target->prepare("SELECT COUNT(*) FROM cis_educ_dispatch_audit WHERE message_id=? AND event_type='RESTORED_QUARANTINE'");$s->execute([$pending]);
+        dispatchCheck((int)$s->fetchColumn()===1);
+        echo "EDUC recovery archive: authenticated export, tamper rejection, rollback, restore and quarantine passed.\n";
+    }finally{
+        $target=null;
+        $db->exec('DROP DATABASE `'.$name.'`');
+        putenv('FISKAI_CIS_RECOVERY_MODE=0');
+    }
+}
