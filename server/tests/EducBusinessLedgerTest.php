@@ -71,6 +71,8 @@ ledgerReject(DomainException::class,fn()=>EducBusinessLedger::assertBound($next[
 ledgerReject(DomainException::class,fn()=>EducBusinessLedger::assertBound($entry['document'],str_replace('12.50','12.51',$soap),$credential));
 $s=$db->prepare('SELECT document_sha256 FROM cis_educ_response_evidence WHERE message_id=?');$s->execute([$message]);
 ledgerCheck($s->fetchColumn()===$entry['digest']);
+$head=$ledger->checkpoint($subject,$storageKey);
+ledgerCheck($head['position']===5&&$head['subject']===$subject);
 echo "EDUC immutable business ledger, document chain and exact signed request binding passed.\n";
 
 if(getenv('FISKAI_CI_RECOVERY_TEST')==='1'){
