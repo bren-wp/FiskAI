@@ -42,18 +42,29 @@ final class F2ValidationEvidence {
         if(!$details||$details['type']!==OPENSSL_KEYTYPE_EC||($details['ec']['curve_name']??'')!=='prime256v1'||
             openssl_verify("FISKAI-F2-DUAL-VALIDATION-V2\n".$statement,$signature,$key,OPENSSL_ALGO_SHA256)!==1)
             throw new DomainException('Dual validation signature invalid.');
-        self::checkReport($enSvrl);self::checkReport($hrSvrl);
-        return $expected+['validatorKeySha256'=>$pin,'status'=>'SIGNED_DUAL_SVRL_REVIEWED','dispatchAuthorized'=>false];
+        $warnings=self::checkReport($enSvrl,true);self::checkReport($hrSvrl);
+        return $expected+['validatorKeySha256'=>$pin,'status'=>$warnings===[]?'SIGNED_DUAL_SVRL_REVIEWED':'SIGNED_DUAL_SVRL_REVIEW_REQUIRED',
+            'enWarnings'=>$warnings,'dispatchAuthorized'=>false];
     }
-    private static function checkReport(string $svrl):void {
-        if(strlen($svrl)>1048576||$svrl===''||str_contains($svrl,'<!')||str_contains($svrl,"\0")||!preg_match('//u',$svrl))
+    private static function checkReport(string $svrl,bool $nationalProfileWarnings=false):array {
+        if(strlen($svrl)>1048576||$svrl===''||preg_match('/<!\s*(?:DOCTYPE|ENTITY)\b/i',$svrl)||str_contains($svrl,"\0")||!preg_match('//u',$svrl))
             throw new InvalidArgumentException('Invalid SVRL bytes.');
         $doc=new DOMDocument();
         if(!$doc->loadXML($svrl,LIBXML_NONET)||$doc->doctype!==null||$doc->documentElement?->namespaceURI!=='http://purl.oclc.org/dsdl/svrl'||
             $doc->documentElement?->localName!=='schematron-output')throw new InvalidArgumentException('Invalid SVRL output.');
         $xp=new DOMXPath($doc);$xp->registerNamespace('s','http://purl.oclc.org/dsdl/svrl');
-        if($xp->query('/s:schematron-output/s:active-pattern')->length<1||$xp->query('/s:schematron-output/s:fired-rule')->length<1||
-            $xp->query('//s:failed-assert | //s:successful-report')->length!==0)
-            throw new DomainException('Validator findings or missing execution evidence require review.');
+        if($xp->query('/s:schematron-output/s:active-pattern')->length<1||$xp->query('/s:schematron-output/s:fired-rule')->length<1)
+            throw new DomainException('Missing rule execution evidence.');
+        $warnings=[];
+        foreach($xp->query('//s:failed-assert | //s:successful-report') as $finding){
+            $id=$finding->getAttribute('id');
+            // These exact EN warnings conflict with mandatory Croatian fields.
+            // Retain them only in signed dual REVIEW_REQUIRED evidence; no waiver.
+            if(!$nationalProfileWarnings||$finding->localName!=='failed-assert'||$finding->getAttribute('flag')!=='warning'||
+                !in_array($id,['UBL-CR-006','UBL-CR-200'],true)||in_array($id,$warnings,true))
+                throw new DomainException('Unresolved validator findings.');
+            $warnings[]=$id;
+        }
+        sort($warnings,SORT_STRING);return $warnings;
     }
 }
