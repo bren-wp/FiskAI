@@ -227,7 +227,12 @@ class PaymentPreparationInstrumentedTest {
             DemoDeviceIdentity.digest(token.toByteArray()),DemoDeviceIdentity.digest(body)).joinToString("\n")
         assertArrayEquals(expected.toByteArray(Charsets.UTF_8),msg)
         val sig=android.util.Base64.decode(DemoDeviceIdentity.sign(msg),android.util.Base64.NO_WRAP)
-        fun verify(value:ByteArray)=java.security.Signature.getInstance("SHA256withECDSA").run{initVerify(publicKey);update(value);verify(sig)}
+        fun verify(value:ByteArray):Boolean {
+            val verifier=java.security.Signature.getInstance("SHA256withECDSA")
+            verifier.initVerify(publicKey)
+            verifier.update(value)
+            return verifier.verify(sig)
+        }
         assertTrue(verify(msg))
         assertFalse(verify(DemoDeviceIdentity.message("demo-sync",subject,device,nonce,token,body)))
         assertFalse(verify(DemoDeviceIdentity.message("demo-sync-pull",subject,device,"c".repeat(64),token,body)))
