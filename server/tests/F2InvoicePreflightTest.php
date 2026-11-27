@@ -69,7 +69,14 @@ try{
         'validFrom'=>'2026-01-01','validUntil'=>'2026-12-31','authorizationSha256'=>hash('sha256','synthetic grant')],JSON_THROW_ON_ERROR);
     openssl_sign("FISKAI-F2-PROVIDER-GRANT-V1\n".$grant,$grantSig,$grantKey,OPENSSL_ALGO_SHA256);
     f2Reject(DomainException::class,fn()=>F2ValidationEvidence::verify($xml.' ',$schemaDigest,$manifest,$svrl,$statement,$signature,$validatorPublic,$validatorPin));
+    $failed=str_replace('</svrl:schematron-output>','<svrl:failed-assert id="TEST"/></svrl:schematron-output>',$svrl);
+    $failedStatement=json_encode(['protocol'=>'FISKAI-F2-SVRL-V1','documentSha256'=>hash('sha256',$xml),'schemaManifestSha256'=>$schemaDigest,
+        'validatorManifestSha256'=>$manifest,'svrlSha256'=>hash('sha256',$failed)],JSON_THROW_ON_ERROR);
+    openssl_sign("FISKAI-F2-VALIDATION-V1\n".$failedStatement,$failedSignature,$validatorKey,OPENSSL_ALGO_SHA256);
+    f2Reject(DomainException::class,fn()=>F2ValidationEvidence::verify($xml,$schemaDigest,$manifest,$failed,$failedStatement,$failedSignature,$validatorPublic,$validatorPin));
     f2Reject(DomainException::class,fn()=>F2ProviderGrant::verify($grant,$grantSig,$grantPublic,$grantPin,$subject,'12345678903','ISSUED','2027-01-01'));
+    f2Reject(DomainException::class,fn()=>F2ProviderGrant::verify($grant,$grantSig,$grantPublic,$grantPin,$subject,'12345678903','RECEIVED','2026-11-27'));
+    f2Reject(DomainException::class,fn()=>F2ProviderGrant::verify($grant,$grantSig,$validatorPublic,$validatorPin,$subject,'12345678903','ISSUED','2026-11-27'));
     $storageKey=random_bytes(32);$intake=new F2EducIntake($db,$storageKey);
     $prepare=fn($docId,$value)=>$intake->prepare($subject,$docId,'ISSUED','2026-11-27',$value,$history,'STANDARD_DOMESTIC_B2B',
         $dir,$pins,'Invoice.xsd',$schemaDigest,$sourcePin,$pin26,$svrl,$statement,$signature,$validatorPublic,$validatorPin,$manifest,$grant,$grantSig,$grantPublic,$grantPin);
