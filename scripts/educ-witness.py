@@ -64,7 +64,8 @@ def history(raw):
             and len(set(heads)) == len(heads), "Invalid chain prefix")
     return subject, key_id, heads
 
-def attest(path, key, *, raw=None, subject=None):
+def attest(path, key, *, raw=None, subject=None, nonce=None):
+    require(nonce is None or (raw is None and isinstance(nonce,str) and HEX.fullmatch(nonce)), "Invalid freshness challenge")
     private_file(path)
     public = signing_public(key)
     pin = hashlib.sha256(public).hexdigest()
@@ -89,10 +90,14 @@ def attest(path, key, *, raw=None, subject=None):
             require(bool(rows), "Unknown subject")
             key_id, position, head = rows[-1]
         statement = canonical({"protocol":"FISKAI-EDUC-HEAD-V1","subject":subject,"keyId":key_id,"position":position,"head":head})
-        signature = openssl("dgst", "-sha256", "-sign", str(key), "-passin", "pass:", data=statement)
+        signed = statement if nonce is None else b"FISKAI-EDUC-FRESH-V1\n" + nonce.encode("ascii") + b"\n" + statement
+        signature = openssl("dgst", "-sha256", "-sign", str(key), "-passin", "pass:", data=signed)
         db.commit()
-        return {"statement":base64.b64encode(statement).decode(), "signature":base64.b64encode(signature).decode(),
-                "publicKeySha256":pin}
+        result = {"statement":base64.b64encode(statement).decode(), "signature":base64.b64encode(signature).decode(),
+                  "publicKeySha256":pin}
+        if nonce is not None:
+            result["nonce"] = nonce
+        return result
     except BaseException:
         db.rollback()
         raise
