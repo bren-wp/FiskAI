@@ -8,6 +8,9 @@ import re
 import stat
 import sys
 import urllib.request
+import urllib.error
+import time
+import http.client
 import zipfile
 
 BASE = "https://porezna-uprava.gov.hr/UserDocsImages/Fiskalizacija/Tehni%C4%8Dke%20specifikacije/"
@@ -74,10 +77,24 @@ def main():
     for name in NAMES:
         url = BASE + name
         req = urllib.request.Request(url, headers={"User-Agent": "FiskAI-Contract-Audit/1.0"})
-        with opener.open(req, timeout=30) as response:
-            if response.status != 200 or response.geturl() != url:
-                raise ValueError("Unexpected official source response")
-            data = response.read(MAX_ARCHIVE + 1)
+        for attempt in range(3):
+            try:
+                with opener.open(req, timeout=30) as response:
+                    if response.status != 200 or response.geturl() != url:
+                        raise ValueError("Unexpected official source response")
+                    data = response.read(MAX_ARCHIVE + 1)
+                break
+            except (TimeoutError, urllib.error.URLError, http.client.IncompleteRead) as exc:
+                if isinstance(exc, urllib.error.HTTPError) and exc.code not in {408, 429, 500, 502, 503, 504}:
+                    raise
+                # A certificate error or non-transient connection error must not be bypassed.
+                if isinstance(exc, urllib.error.URLError) and not isinstance(exc, urllib.error.HTTPError):
+                    if not isinstance(exc.reason, (TimeoutError, ConnectionResetError, ConnectionRefusedError)):
+                        raise
+                if attempt == 2:
+                    raise
+                print(f"Transient download error for {name}; attempt {attempt+1}/3 failed.", file=sys.stderr)
+                time.sleep(2 ** (attempt + 1))
         if len(data) > MAX_ARCHIVE:
             raise ValueError("Contract archive exceeds limit")
         files = inspect(data, out / name.removesuffix(".zip"))

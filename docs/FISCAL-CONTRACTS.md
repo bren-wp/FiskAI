@@ -12,3 +12,5 @@ Artefakt GitHub Actions 15181221845 (run 45961596370) preuzet je i lokalno pregl
 
 ## Verifikacija JIR-a (offline)
 FiscalResponse implementira strogi profil primjera 9.4 specifikacije v2.7: SOAP 1.1, inclusive C14N 1.0, RSA-SHA256 i SHA256, jedinstveni referencirani RacunOdgovor, službeni XSD, očekivani ID poruke i JIR. Potpis i digest provjeravaju se uz neovisno pribavljen, hash-pinned javni certifikat CIS-a; KeyInfo nije izvor povjerenja. Test koristi privremeni sintetički certifikat i ne šalje zahtjev. Službeni javni certifikati: https://porezna.gov.hr/fiskalizacija/gotovinski-racuni/tehnicki-podaci/o/certifikati-za-preuzimanje . Produkcijska konfiguracija povjerenja, rotacija/revokacija certifikata, trajna zaštita od replaya i autorizirano EDUC slanje nisu uključeni.
+
+Preuzimanje ima najviše tri pokušaja po arhivi za prolazne mrežne pogreške. Izvor, TLS, zabrana preusmjeravanja, SHA-256 pinovi i XSD/XMLDSig testovi ostaju nepromijenjeni. Neuspjeh nakon pokušaja ostaje CI pogreška.
