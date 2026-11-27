@@ -21,3 +21,9 @@ Sljedeći koraci: automatski cross-platform parity test svih odluka, povijest po
 ## Jedinstveni katalog pravila
 
 `server/contracts/legal-rules.json` je izvor za generirane Kotlin i PHP tablice, koje oba enginea koriste. `python3 scripts/check-legal-catalog.py --write` reproducira tablice; bez `--write` CI odbija odstupanje. Katalog trenutno podržava cijele kalendarske godine, ne unutar-godišnje promjene ili arhivu više revizija iste godine. Te mogućnosti i trajna pohrana odluka uz izdane dokumente ostaju otvorene. Testovi enginea i dalje su potrebni za provjeru ponašanja izvan same tablice.
+
+## Povijest poreznog statusa
+
+`TaxStatusHistory` (Kotlin/PHP) prihvaća vremenske intervale jednog poslovnog subjekta: početak uključiv, završetak isključiv; `null` označava otvoren interval. Intervali se sortiraju, provjeravaju i odbijaju ako se preklapaju. Nedostajući interval znači UNKNOWN, nikad pretpostavljeni aktualni status. Procjena uključuje datum događaja, efektivni interval, status, opseg i verzioniranu odluku. Ulazni popis kopira se; izmjene vanjskog popisa ne mijenjaju prethodno izračunate procjene.
+
+Ovo je domenska jezgra, ne trajna evidencija: spremanje uz poslovni subjekt, ovlašteno dokazivanje statusa, trajna pohrana uz nepromjenjiv dokument, Room/SQL migracije, backup i UI još nisu povezani. Ne koristi se za produkcijsko izdavanje. Regresijski testovi `TaxStatusHistoryTest` provjeravaju promjenu statusa, praznine, granice intervala, preklapanje i neovisnost procjene od izmjene ulaza.
