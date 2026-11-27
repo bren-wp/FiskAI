@@ -118,7 +118,7 @@ private fun FiskApp(store: DraftStore, directory: DirectoryStore, businessStore:
                     }, modifier = Modifier.fillMaxWidth()) { Text(if(exporting) "Spremanje…" else "Izvezi PDF nacrt") }
                     if(exportStatus.isNotEmpty()) Text(exportStatus)
                 }
-                page == "Novi" -> key(kind) { DraftForm(kind, error, contacts.filter { !it.supplier }, products) { draft ->
+                page == "Novi" -> key(kind) { DraftForm(kind, error, contacts.filter { !it.supplier }, products.filterNot { it.archived }) { draft ->
                     val updated = items + draft
                     if(store.save(updated)) { items = updated; page = if(kind == "Račun") "Računi" else "Ponude"; error = "" } else error = "Spremanje nije uspjelo."
                 } }
@@ -194,6 +194,7 @@ private fun DraftForm(kind: String, saveError: String, contacts: List<Contact>, 
     var quantity by remember { mutableStateOf("1") }
     var price by remember { mutableStateOf("") }
     var vat by remember { mutableStateOf("25") }
+    var kpd by remember { mutableStateOf("") }
     var lines by remember { mutableStateOf(listOf<Line>()) }
     var message by remember { mutableStateOf("") }
     Text(if(kind == "Račun") "Novi račun" else "Nova ponuda", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
@@ -209,8 +210,9 @@ private fun DraftForm(kind: String, saveError: String, contacts: List<Contact>, 
             Column(Modifier.weight(1f)) { Text(line.description); Text(euro(line.total)) }
             TextButton(onClick = { lines = lines.filterIndexed { i, _ -> i != index } }) { Text("Ukloni") }
         } }
-        if(products.isNotEmpty()) DirectoryPicker("Odaberi artikl", products.map { it.name }) { index -> val product = products[index]; description = product.name; price = product.price.toPlainString(); vat = product.vat.toPlainString() }
+        if(products.isNotEmpty()) DirectoryPicker("Odaberi artikl", products.map { it.name }) { index -> val product = products[index]; description = product.name; price = product.price.toPlainString(); vat = product.vat.toPlainString(); kpd=product.kpd }
         OutlinedTextField(description, { description = it }, label = { Text("Naziv proizvoda ili usluge") }, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(kpd,{kpd=it},label={Text("KPD 2025 (neobavezno za nacrt)")},modifier=Modifier.fillMaxWidth(),singleLine=true)
         OutlinedTextField(quantity, { quantity = it }, label = { Text("Količina") }, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(price, { price = it }, label = { Text("Jedinična cijena bez PDV-a") }, modifier = Modifier.fillMaxWidth())
         Text("Stopa PDV-a (radni izračun)")
@@ -220,7 +222,8 @@ private fun DraftForm(kind: String, saveError: String, contacts: List<Contact>, 
         OutlinedButton(onClick = {
             val q = parseDecimal(quantity); val p = parseDecimal(price)
             if(description.isBlank() || q == null || p == null || q.signum() <= 0 || p.signum() < 0 || q.precision() > 12 || p.precision() > 12 || q.scale() !in 0..4 || p.scale() !in 0..4) message = "Provjerite naziv, količinu i cijenu."
-            else { lines = lines + Line(description.trim(), q, p, BigDecimal(vat)); description = ""; price = ""; quantity = "1"; message = "" }
+            else if(kpd.isNotBlank() && normalizeKpd(kpd)==null) message="KPD mora imati šest znamenki."
+            else { lines = lines + Line(description.trim(), q, p, BigDecimal(vat),normalizeKpd(kpd).orEmpty()); description = ""; price = ""; quantity = "1"; kpd=""; message = "" }
         }, modifier = Modifier.fillMaxWidth()) { Text("+ Dodaj stavku") }
     }
     Panel {

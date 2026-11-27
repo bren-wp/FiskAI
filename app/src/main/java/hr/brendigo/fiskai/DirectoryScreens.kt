@@ -1,6 +1,8 @@
 package hr.brendigo.fiskai
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -90,7 +92,7 @@ internal fun ProductScreen(products: List<Product>, onSave: (List<Product>) -> B
     }
     OutlinedTextField(query, { query = it }, label = { Text("Pretraži proizvode i usluge") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
     Button(onClick = { editing = Product(name = "", code = "", price = BigDecimal.ZERO, vat = BigDecimal("25"), service = false); error = "" }, modifier = Modifier.fillMaxWidth()) { Text("+ Dodaj proizvod ili uslugu") }
-    val shown = products.filter { (filter == "Svi" || (filter == "Usluge") == it.service) && (it.name.contains(query, true) || it.code.contains(query, true)) }.sortedBy { it.name.lowercase() }
+    val shown = products.filter { !it.archived && (filter == "Svi" || (filter == "Usluge") == it.service) && (it.name.contains(query, true) || it.code.contains(query, true) || it.kpd.contains(query)) }.sortedBy { it.name.lowercase() }
     if(shown.isEmpty()) Text("Nema artikala.")
     shown.forEach { product -> Panel {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -98,6 +100,14 @@ internal fun ProductScreen(products: List<Product>, onSave: (List<Product>) -> B
             Text(euro(product.price), fontWeight = FontWeight.Bold)
         }
         Text("PDV: " + product.vat.toPlainString() + "% · Cijena bez PDV-a")
+        Text("KPD 2025: " + product.kpd.ifEmpty{"Nije dodijeljena"})
+        product.retail?.let { r ->
+            Text("Maloprodajna cijena: "+euro(r.gross))
+            Text("Bazna cijena: "+(r.base?.let(::euro) ?: "Nije utvrđena"))
+            if(r.referenceDate.isNotEmpty()) Text("Referentni datum: "+r.referenceDate)
+            if(r.special) Text("Poseban oblik prodaje")
+        }
+        if(product.priceHistory.isNotEmpty()) Text("Prethodni zapisi cijena: "+product.priceHistory.size)
         Row { TextButton(onClick = { editing = product; error = "" }) { Text("Uredi") }; TextButton(onClick = { deleting = product; error = "" }) { Text("Obriši") } }
     } }
     if(error.isNotEmpty()) Text(error, color = MaterialTheme.colorScheme.error)
@@ -108,32 +118,48 @@ internal fun ProductScreen(products: List<Product>, onSave: (List<Product>) -> B
             var price by remember { mutableStateOf(product.price.toPlainString()) }
             var vat by remember { mutableStateOf(product.vat.toPlainString()) }
             var service by remember { mutableStateOf(product.service) }
+            var kpd by remember { mutableStateOf(product.kpd) }
+            var gross by remember { mutableStateOf(product.retail?.gross?.toPlainString().orEmpty()) }
+            var basePrice by remember { mutableStateOf(product.retail?.base?.toPlainString().orEmpty()) }
+            var reference by remember { mutableStateOf(product.retail?.referenceDate.orEmpty()) }
+            var evidence by remember { mutableStateOf(product.retail?.evidence.orEmpty()) }
+            var special by remember { mutableStateOf(product.retail?.special ?: false) }
             AlertDialog(onDismissRequest = { editing = null }, title = { Text("Artikl") }, text = {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Column(Modifier.heightIn(max=420.dp).verticalScroll(rememberScrollState()),verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     OutlinedTextField(name, { name = it }, label = { Text("Naziv") }, singleLine = true)
                     OutlinedTextField(code, { code = it }, label = { Text("Šifra") }, singleLine = true)
                     OutlinedTextField(price, { price = it }, label = { Text("Cijena bez PDV-a (€)") }, singleLine = true)
                     DirectoryPicker("PDV: $vat%", listOf("0%", "5%", "13%", "25%")) { vat = listOf("0","5","13","25")[it] }
                     Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(checked = service, onCheckedChange = { service = it }); Text("Usluga") }
+                    OutlinedTextField(kpd,{kpd=it},label={Text("KPD 2025 (XX.XX.XX)")},singleLine=true)
+                    Text("Šifru provjerite u službenom KLASUS katalogu; format ne potvrđuje klasifikaciju.")
+                    OutlinedTextField(gross,{gross=it},label={Text("Maloprodajna cijena (€)")},singleLine=true)
+                    OutlinedTextField(basePrice,{basePrice=it},label={Text("Bazna cijena (€)")},singleLine=true)
+                    OutlinedTextField(reference,{reference=it},label={Text("Referentni datum (GGGG-MM-DD)")},singleLine=true)
+                    OutlinedTextField(evidence,{evidence=it},label={Text("Izvor / dokaz bazne cijene")})
+                    Row(verticalAlignment=Alignment.CenterVertically){Checkbox(checked=special,onCheckedChange={special=it});Text("Poseban oblik prodaje")}
                     if(error.isNotEmpty()) Text(error, color = MaterialTheme.colorScheme.error)
                 }
             }, confirmButton = { TextButton(onClick = {
                 val p = parseDecimal(price)
                 val n = name.trim(); val c = code.trim()
+                val retailResult=runCatching { parseRetail(gross,basePrice,reference,evidence,special) }
                 error = when {
                     n.isBlank() || n.length > 200 || c.isBlank() || c.length > 64 -> "Unesite naziv i šifru."
+                    kpd.isNotBlank() && normalizeKpd(kpd)==null -> "KPD mora imati šest znamenki."
+                    retailResult.isFailure -> "Provjerite maloprodajnu i baznu cijenu, datum i dokaz."
                     products.any { it.id != product.id && it.code.equals(c, true) } -> "Šifra artikla već postoji."
                     p == null || p.signum() < 0 || p.precision() > 12 || p.scale() !in 0..4 -> "Cijena nije ispravna."
                     else -> ""
                 }
                 if(error.isEmpty() && p != null) {
-                    if(onSave(products.filterNot { it.id == product.id } + product.copy(name = n, code = c, price = p, vat = BigDecimal(vat), service = service))) editing = null else error = "Spremanje nije uspjelo."
+                    if(onSave(products.filterNot { it.id == product.id } + product.withRetail(retailResult.getOrThrow()).copy(name = n, code = c, price = p, vat = BigDecimal(vat), service = service,kpd=normalizeKpd(kpd).orEmpty()))) editing = null else error = "Spremanje nije uspjelo."
                 }
             }) { Text("Spremi") } }, dismissButton = { TextButton(onClick = { editing = null; error = "" }) { Text("Odustani") } })
         }
     }
     deleting?.let { product -> DeleteDialog(product.name, { deleting = null }) {
-        if(!onSave(products.filterNot { it.id == product.id })) error = "Brisanje nije uspjelo."
+        if(!onSave(products.map { if(it.id==product.id) it.copy(archived=true) else it })) error = "Arhiviranje nije uspjelo."
         deleting = null
     } }
 }

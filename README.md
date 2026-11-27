@@ -1,23 +1,23 @@
+<p align="center"><img src="branding/banner.svg" alt="FiskAI — Računi, ponude i poslovanje" width="100%"></p>
+
 # FiskAI
 
-**Računi, ponude i poslovanje na jednom mjestu.**
+**Organizirajte poslovne dokumente i katalog na jednom mjestu.**
 
-FiskAI je hrvatska poslovna platforma u razvoju. Nativna Android aplikacija omogućuje lokalno sastavljanje nacrta računa i ponuda, lokalni imenik kupaca i dobavljača te katalog proizvoda i usluga te pregled poslovnih dokumenata.
+FiskAI je hrvatska Android aplikacija za pripremu računa i ponuda, upravljanje kupcima, dobavljačima i artiklima te lokalnu evidenciju poslovanja.
 
-PDF nacrte moguće je izvesti u odabranu mapu uređaja. Lokalni zapisi šifrirani su putem Android Keystorea. Postavke poslovnog subjekta, poslovnih prostora, naplatnih uređaja i operatera spremaju se na uređaju.
+| | |
+|---|---|
+| 🧾 **Računi i ponude** | Sastavite nacrte, izračunajte iznose i izvezite PDF. |
+| 👥 **Kupci i dobavljači** | Organizirajte kontakte i provjerite format OIB-a. |
+| 📦 **Proizvodi i usluge** | Šifre artikala, KPD oznake i povijest maloprodajnih cijena. |
+| 🔒 **Privatnost** | Lokalno šifrirani poslovni zapisi. |
+| 🏢 **Poslovne postavke** | Poslovni subjekt, prostori, uređaji i operateri. |
 
-Lokalna provjera PKCS#12 certifikata (.p12/.pfx) prikazuje valjanost, izdavatelja i otisak. Opcionalni lokalni sef testnih certifikata sprema šifriranu PKCS#12 kopiju; lozinka se nikada ne sprema. Sef nije produkcijski fiskalni potpisnik.
-
-Poslovni zapisi koriste transakcijsku SQLite pohranu s AES-GCM šifriranjem sadržaja i migracijom postojećih lokalnih zapisa. Lokalna pohrana nije zamjena za sigurnosnu kopiju.
-
-Test fiskalizacije provjerava dostupnost službenog CIS testnog servisa operacijom Echo. Ne šalje račune ni osobne podatke, ne stvara JIR i ne potvrđuje poreznu usklađenost.
+<p align="center"><img src="branding/logo.svg" alt="FiskAI" width="240"></p>
 
 ## Dostupnost
 
-Trenutačno: razvojna verzija. Nacrti nisu izdani porezni dokumenti. Fiskalizacija, eRačuni, eIzvještavanje i sinkronizacija još nisu aktivirani.
+Trenutačna verzija namijenjena je testiranju. Dokumenti su nacrti, a fiskalni moduli nisu odobreni za produkcijsko izdavanje računa. Bazne cijene i KPD zahtijevaju provjeru izvora. Slike iznad su vektorski identitet, ne snimke aplikacije.
 
-## Izgradnja
-
-Android Studio ili Gradle 9.9.2, JDK 17 i Android SDK 37.1. Iz korijena: gradle :app:testDebugUnitTest :app:assembleDebug :app:bundleDebug.
-
-MIT — vidi LICENSE.
+[Izdanja](https://github.com/bren-wp/FiskAI/releases) · [Dokumentacija](docs/ACCEPTANCE.md) · [Licenca](LICENSE)
