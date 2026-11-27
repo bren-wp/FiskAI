@@ -51,6 +51,37 @@ final class DemoSync {
         $ordered=[];foreach($keys as $k)$ordered[$k]=$row[$k];
         return $ordered;
     }
+    /** Complete bounded immutable metadata snapshot, scoped by the device credential.
+     * Same lock order as push. A single transaction avoids pagination omissions.
+     */
+    public function pull(string $authorization,array $request):array {
+        if(!preg_match('/\ABearer ([0-9a-f]{64})\z/D',$authorization,$m))throw new DemoSyncAuthException('Unauthorized.');
+        if(count($request)!==2||($request['protocol']??null)!==1||!is_string($request['subjectId']??null))
+            throw new InvalidArgumentException('Invalid snapshot request.');
+        self::uuid($request['subjectId']);
+        $this->db->beginTransaction();
+        try {
+            $s=$this->db->prepare('SELECT subject_id FROM demo_sync_device WHERE token_sha256=? AND revoked_at IS NULL AND expires_at>UTC_TIMESTAMP(6) FOR UPDATE');
+            $s->execute([hash('sha256',$m[1])]);$subject=$s->fetchColumn();
+            if(!is_string($subject)||!hash_equals($subject,$request['subjectId']))throw new DemoSyncAuthException('Unauthorized.');
+            $s=$this->db->prepare('SELECT subject_id FROM demo_sync_subject WHERE subject_id=? FOR UPDATE');
+            $s->execute([$subject]);if($s->fetchColumn()!==$subject)throw new RuntimeException('Scope unavailable.');
+            $s=$this->db->prepare('SELECT event_id,receipt_id,document_id,evidence_sha256,event_date,amount_cents,rule_version,deadline_date,payload_sha256 FROM demo_sync_payment WHERE subject_id=? ORDER BY event_id LIMIT 2001 FOR UPDATE');
+            $s->execute([$subject]);$events=[];
+            while($row=$s->fetch(PDO::FETCH_ASSOC)){
+                if(count($events)>=2000)throw new RuntimeException('Scope capacity exceeded.');
+                $event=self::fields(['eventId'=>$row['event_id'],'receiptId'=>$row['receipt_id'],
+                    'documentId'=>$row['document_id'],'evidenceSha256'=>$row['evidence_sha256'],
+                    'eventDate'=>$row['event_date'],'amountCents'=>(int)$row['amount_cents'],
+                    'ruleVersion'=>$row['rule_version'],'deadlineDate'=>$row['deadline_date']]);
+                if(!hash_equals($row['payload_sha256'],hash('sha256',json_encode($event,JSON_THROW_ON_ERROR))))
+                    throw new RuntimeException('Stored metadata integrity failure.');
+                $events[]=$event;
+            }
+            $this->db->commit();
+            return ['protocol'=>1,'subjectId'=>$subject,'status'=>'DEMO_METADATA_SNAPSHOT','events'=>$events];
+        }catch(Throwable $e){if($this->db->inTransaction())$this->db->rollBack();throw $e;}
+    }
     /** Authenticate inside the transaction. Every batch either commits in full or rolls back. */
     public function push(string $authorization,array $request):array {
         if(!preg_match('/\ABearer ([0-9a-f]{64})\z/D',$authorization,$m))throw new DemoSyncAuthException('Unauthorized.');
