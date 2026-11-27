@@ -7,6 +7,8 @@ on:
       - 'scripts/test-f2-bundle.py'
       - 'scripts/accept-f2-contracts.py'
       - 'scripts/test-f2-contract-acceptance.py'
+      - 'scripts/validate-f2-uploaded.py'
+      - 'scripts/test-f2-uploaded.py'
   workflow_dispatch:
 permissions:
   contents: read
@@ -86,5 +88,23 @@ jobs:
         with:
           name: FiskAI-F2-originals-UNREVIEWED
           path: f2-contract-candidates/
+          if-no-files-found: error
+          retention-days: 7
+      - name: Diagnose exact user-supplied contract version
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! /usr/bin/python3 -c 'import lxml.etree'; then
+            test -f /etc/apt/sources.list.d/ubuntu.sources
+            opts=(-o Dir::Etc::sourcelist=/etc/apt/sources.list.d/ubuntu.sources -o Dir::Etc::sourceparts=- -o Acquire::Retries=3)
+            sudo apt-get "${opts[@]}" update
+            sudo apt-get "${opts[@]}" install -y --no-install-recommends python3-lxml
+          fi
+          /usr/bin/python3 scripts/test-f2-uploaded.py f2-contract-candidates
+          /usr/bin/python3 scripts/validate-f2-uploaded.py f2-contract-candidates > f2-xsd-diagnostics.json
+      - uses: actions/upload-artifact@v6
+        with:
+          name: FiskAI-F2-XSD-diagnostics-NOT-APPROVAL
+          path: f2-xsd-diagnostics.json
           if-no-files-found: error
           retention-days: 7
