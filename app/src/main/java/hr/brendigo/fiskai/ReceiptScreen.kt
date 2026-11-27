@@ -8,6 +8,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -30,6 +31,10 @@ internal fun ReceiptScreen(page:String,business:BusinessProfile,onBusy:(Boolean)
     var choiceIndex by remember{mutableStateOf(0)}
     var selected by remember{mutableStateOf<BankEvidence?>(null)}
     var note by remember{mutableStateOf("")}
+    var syncDialog by remember{mutableStateOf(false)}
+    var syncUrl by remember{mutableStateOf("")}
+    var syncSubject by remember{mutableStateOf("")}
+    var syncToken by remember{mutableStateOf("")}
     var manual by remember{mutableStateOf(false)}
     var reference by remember{mutableStateOf("")}
     var amount by remember{mutableStateOf("")}
@@ -92,6 +97,7 @@ internal fun ReceiptScreen(page:String,business:BusinessProfile,onBusy:(Boolean)
             Text("Gotovina: "+euro(ReceiptRules.amount(shown.filter{it.method=="CASH"}.sumOf{it.cents})))
             Text("Transakcijski račun: "+euro(ReceiptRules.amount(shown.filter{it.method=="BANK"}.sumOf{it.cents})))
         }
+        if(page=="Evidencija naplate"&&BuildConfig.DEMO_MODE)OutlinedButton(enabled=!busy&&ready,onClick={syncDialog=true;syncToken=""},modifier=Modifier.fillMaxWidth()){Text("Sinkroniziraj DEMO naplate")}
         if(page=="Evidencija naplate")Button(enabled=!busy&&ready,onClick={manual=true;note="";reference="";date=today;amount=""},modifier=Modifier.fillMaxWidth()){Text("Evidentiraj gotovinski primitak")}
         else Text("Radni pregled za pripremu KPR-a, nije službeni obrazac. Porezni tretman i korekcije potrebno je provjeriti.")
         shown.forEachIndexed{i,row->Panel{
@@ -137,6 +143,23 @@ internal fun ReceiptScreen(page:String,business:BusinessProfile,onBusy:(Boolean)
             }){Text("Poveži")}
         },dismissButton={TextButton(enabled=!busy,onClick={paymentReceipt=null}){Text("Zatvori")}})
     }
+    if(syncDialog)AlertDialog(onDismissRequest={if(!busy){syncDialog=false;syncToken=""}},title={Text("DEMO sinkronizacija")},text={
+        Column(verticalArrangement=Arrangement.spacedBy(4.dp)){
+            Text("Samo testni zapisi. Podatke šaljite isključivo na vlastiti pouzdani HTTPS server. Ovo nije fiskalizacija.")
+            OutlinedTextField(syncUrl,{syncUrl=it.take(512)},label={Text("HTTPS adresa API-ja")},singleLine=true)
+            OutlinedTextField(syncSubject,{syncSubject=it.take(36)},label={Text("ID testnog subjekta")},singleLine=true)
+            OutlinedTextField(syncToken,{syncToken=it.take(64)},label={Text("Token uređaja")},singleLine=true,visualTransformation=PasswordVisualTransformation())
+        }
+    },confirmButton={TextButton(enabled=!busy&&syncToken.matches(Regex("[0-9a-f]{64}"))&&syncUrl.isNotBlank()&&syncSubject.isNotBlank(),onClick={
+        val url=syncUrl;val subject=syncSubject;val token=syncToken
+        syncToken="";syncDialog=false
+        working(true)
+        scope.launch{try{
+            withContext(Dispatchers.IO){runCatching{DemoSyncClient.push(url,subject,token,store.demoSyncEvents(business))}}
+                .onSuccess{message="Potvrđen prijenos DEMO zapisa: "+it}
+                .onFailure{message="Prijenos nije u cijelosti potvrđen. Lokalni zapisi ostaju sačuvani. Provjerite adresu, pristup ili sukob zapisa pa pokušajte ponovno."}
+        }finally{working(false)}}
+    }){Text("Pošalji testne zapise")}},dismissButton={TextButton(enabled=!busy,onClick={syncDialog=false;syncToken=""}){Text("Odustani")}})
     if(manual)AlertDialog(onDismissRequest={if(!busy)manual=false},title={Text("Gotovinski primitak")},text={
         Column(verticalArrangement=Arrangement.spacedBy(4.dp)){
             Text("Unesite stvarno primljeni iznos i jedinstvenu oznaku dokaza. Ovaj zapis nije fiskalni račun i ne može se mijenjati.")
