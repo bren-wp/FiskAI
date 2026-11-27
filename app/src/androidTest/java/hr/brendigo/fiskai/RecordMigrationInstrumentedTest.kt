@@ -55,4 +55,38 @@ class RecordMigrationInstrumentedTest {
             assertEquals(2L,DemoLedger(context,db).freeze(draft.copy(id=UUID.randomUUID().toString()),business,setup,register,operator))
         } finally { db.close();context.deleteDatabase(name);context.getSharedPreferences(ns,0).edit().clear().commit() }
     }
+
+    @Test fun v8UpgradeRetainsConfirmedReceiptAndImmutableDocument() {
+        val ctx=InstrumentationRegistry.getInstrumentation().targetContext
+        val name="migration-v8-"+UUID.randomUUID()+".db"
+        var db=RecordDatabase(ctx,name)
+        var room=hr.brendigo.fiskai.room.FiscalRoomDatabase.open(ctx,name)
+        try {
+            val business=BusinessProfile(name="DEMO",oib="12345678903",address="Test",city="Test",vatRegistered=true)
+            val register=Register("PP1","1","DEMO blagajna")
+            val operator=Operator("OP1","Test","12345678903")
+            val setup=FiscalSetup().withPremise(Premise("PP1","Test","Testna adresa")).withRegister(register).withOperator(operator)
+            val draft=Draft(kind="Račun",customer="DEMO",oib="",lines=listOf(Line("Test",BigDecimal.ONE,BigDecimal("10.00"),BigDecimal("25"))))
+            val ledger=RoomDemoLedger(ctx,db,room,null)
+            assertEquals(1L,ledger.freeze(draft,business,setup,register,operator))
+            val doc=ledger.history().single()
+            val receiptStore=ReceiptStore(ctx,db,room)
+            assertTrue(receiptStore.cash(business,"TEST-8","2026-11-27","12.50","Sintetički dokaz"))
+            val receipt=receiptStore.read().receipts.single()
+            val cipher=room.receipts().receiptById(receipt.id).payload
+            room.close()
+            val sql=db.writableDatabase
+            sql.execSQL("DROP TABLE demo_payment_preparation")
+            sql.version=8
+            db.close()
+            db=RecordDatabase(ctx,name)
+            assertEquals(9,db.writableDatabase.version)
+            room=hr.brendigo.fiskai.room.FiscalRoomDatabase.open(ctx,name)
+            assertEquals(doc.snapshot,room.queue().document(doc.id).payload)
+            assertEquals(cipher,room.receipts().receiptById(receipt.id).payload)
+            assertEquals(receipt,ReceiptStore(ctx,db,room).read().receipts.single())
+            assertEquals("QUEUED",room.queue().entry(doc.id).state)
+            assertTrue(db.writableDatabase.rawQuery("SELECT 1 FROM demo_payment_preparation",null).use{!it.moveToFirst()})
+        } finally {room.close();db.close();ctx.deleteDatabase(name)}
+    }
 }
