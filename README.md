@@ -28,7 +28,7 @@ KPD oznake možete pretražiti i odabrati iz povezanog HTTPS kataloga. Izvoz tes
 
 ## Preuzimanja
 
-[GitHub Releases](https://github.com/bren-wp/FiskAI/releases) — planirani paketi v0.1.0: instalacijski APK (potpis za testiranje), zasebni DEMO APK i nepotpisani release AAB za kasnije potpisivanje. Izvorni kod obuhvaća Android, web, server i brending.
+[GitHub Releases](https://github.com/bren-wp/FiskAI/releases/tag/v0.1.0) — dostupno testno izdanje v0.1.0: instalacijski APK (potpis za testiranje), zasebni DEMO APK i nepotpisani release AAB za kasnije potpisivanje. Izvorni kod obuhvaća Android, web, server i brending.
 
 ## Dostupnost
 

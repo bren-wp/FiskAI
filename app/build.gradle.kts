@@ -9,8 +9,8 @@ android {
         applicationId = "hr.brendigo.fiskai"
         minSdk = 24
         targetSdk = 36
-        versionCode = 14
-        versionName = "0.1.0"
+        versionCode = 15
+        versionName = "0.1.1"
         manifestPlaceholders["appLabel"] = "FiskAI"
         buildConfigField("boolean", "DEMO_MODE", "false")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

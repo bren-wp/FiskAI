@@ -38,6 +38,7 @@ jobs:
       - run: php -v && php -m
       - run: find web server -name '*.php' -print0 | xargs -0 -n1 php -l
       - run: php server/tests/PriceListsTest.php
+      - run: php server/tests/PriceDownloadTest.php
       - run: php server/tests/DatabaseTest.php
       - run: php server/tests/FiscalSignatureTest.php
       - run: sudo apt-get update && sudo apt-get install -y xmlsec1
