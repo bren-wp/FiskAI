@@ -1,14 +1,36 @@
 name: Official CIS contract acquisition
 on:
   pull_request:
-    paths: ['scripts/fetch-fiscal-contracts.py','scripts/verify-fiscal-contracts.py','server/contracts/**','server/src/FiscalContract.php','server/src/FiscalSignature.php','server/tests/OfficialFiscalContractTest.php','server/src/FiscalResponse.php','server/tests/FiscalResponseTest.php','.github/workflows/fiscal-contracts.yml']
+    paths: ['scripts/fetch-fiscal-contracts.py','scripts/verify-fiscal-contracts.py','server/contracts/**','server/src/FiscalContract.php','server/src/FiscalSignature.php','server/tests/OfficialFiscalContractTest.php','server/src/FiscalResponse.php','server/src/CisEducResponseEvidence.php','server/database/**','server/tests/FiscalResponseTest.php','.github/workflows/fiscal-contracts.yml']
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
   acquire:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - database: 'mysql:8.4'
+            healthcheck: 'mysqladmin ping -h 127.0.0.1'
+          - database: 'mariadb:11.4'
+            healthcheck: 'healthcheck.sh --connect --innodb_initialized'
+    services:
+      mysql:
+        image: ${{ matrix.database }}
+        env:
+          MYSQL_ROOT_PASSWORD: ci-only-password
+          MYSQL_DATABASE: fiskai_test
+          MARIADB_ROOT_PASSWORD: ci-only-password
+          MARIADB_DATABASE: fiskai_test
+        ports: ['3306:3306']
+        options: --health-cmd="${{ matrix.healthcheck }}" --health-interval=10s --health-timeout=5s --health-retries=12
+    env:
+      FISKAI_DB_DSN: mysql:host=127.0.0.1;port=3306;dbname=fiskai_test;charset=utf8mb4
+      FISKAI_DB_USER: root
+      FISKAI_DB_PASSWORD: ci-only-password
     steps:
       - uses: actions/checkout@v7
         with:
@@ -24,6 +46,6 @@ jobs:
           php server/tests/FiscalResponseTest.php "$(dirname "$schema")"
       - uses: actions/upload-artifact@v6
         with:
-          name: FiskAI-official-contracts-unreviewed
+          name: FiskAI-official-contracts-unreviewed-${{ strategy.job-index }}
           path: contract-review/
           if-no-files-found: error
