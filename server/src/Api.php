@@ -9,7 +9,8 @@ header('Referrer-Policy: no-referrer');
 try{
     $action=$_GET['action']??'';
     $method=$_SERVER['REQUEST_METHOD'];
-    if($action==='demo-sync'&&$method==='POST'){
+    if(in_array($action,['demo-sync','demo-sync-pull'],true)&&$method==='POST'){
+        header('Cache-Control: no-store');
         // Do not trust caller-supplied forwarding headers. TLS must be terminated
         // locally or the trusted server configuration must establish HTTPS.
         if(getenv('FISKAI_DEMO_SYNC_ENABLED')!=='1')jsonResponse(['error'=>'Usluga nije dostupna.'],404);
@@ -21,7 +22,7 @@ try{
         if($body===false||strlen($body)>65536)jsonResponse(['error'=>'Zahtjev je prevelik.'],413);
         $data=json_decode($body,true,16,JSON_THROW_ON_ERROR);
         if(!is_array($data))throw new InvalidArgumentException('Neispravan JSON.');
-        try{jsonResponse((new DemoSync(db()))->push($auth,$data));}
+        try{$sync=new DemoSync(db());jsonResponse($action==='demo-sync-pull'?$sync->pull($auth,$data):$sync->push($auth,$data));}
         catch(DemoSyncAuthException $e){jsonResponse(['error'=>'Pristup nije odobren.'],401);}
         catch(DemoSyncConflict $e){jsonResponse(['error'=>'Sukob zapisa. Lokalni zapisi nisu izmijenjeni.'],409);}
     }
