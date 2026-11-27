@@ -11,7 +11,8 @@ from lxml import etree as ET
 spec = importlib.util.spec_from_file_location('adapter', Path(__file__).with_name('validate-f2-uploaded.py'))
 v = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(v)
-EN_BLOB = '16298a68dde999dde512cf514b79c839b1ac8040'
+EN_COMMIT = '6e35e0ab8b09eb183f7d84b282e24ef95f9f5715'
+EN_BLOB = 'e2849ece2a6b9d5cdd163f2e7a89a6dc3d43dc8a'
 XSL = 'http://www.w3.org/1999/XSL/Transform'
 SVRL = 'http://purl.oclc.org/dsdl/svrl'
 
@@ -94,7 +95,7 @@ def run(root, document, en_path, en_pin, hr_path, hr_pin, output):
     engine, results = execute(ET.tostring(doc, encoding='unicode'), en, hr)
     summaries = [report(result) for result in results]
     result = {'status': 'OFFLINE_SCHEMATRON_DIAGNOSTICS_ONLY', 'engine': engine,
-              'documentSha256': hashlib.sha256(data).hexdigest(), 'enStylesheetSha256': en_pin,
+              'documentSha256': hashlib.sha256(data).hexdigest(), 'enSourceCommit': EN_COMMIT, 'enStylesheetSha256': en_pin,
               'hrStylesheetSha256': hr_pin, 'en16931': summaries[0], 'hrCius': summaries[1],
               'officialAcceptance': False, 'dispatchAuthorized': False}
     output.mkdir(mode=0o700)
