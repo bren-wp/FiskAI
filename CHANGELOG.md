@@ -1,6 +1,7 @@
 # Promjene
 
 ## 0.1.1 — kandidat (nije objavljeno)
+- Kontrolirana ručna objava tehničkog testnog izdanja samo s glavne grane nakon prolaska CI-ja i provjere obveznih priloga, originalnog brendinga i snimki.
 - Serverski CLI za nedestruktivne, idempotentne SQL migracije s evidencijom SHA-256, zaključavanjem i integracijskim testovima.
 - CycloneDX 1.6 SBOM iz razriješenih Android runtime ovisnosti za debug, demo i release; uključen u kontrolne otiske kandidata.
 - Zasebne akcije otvaranja i preuzimanja javnih cjenika, stabilne poveznice na prikazanu verziju.
