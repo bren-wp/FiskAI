@@ -72,6 +72,51 @@ internal object PaymentPreparationStore {
         })
     }
 
+    data class Choice(val id:String,val label:String,val customer:String,val date:String)
+    data class Selection(val choices:List<Choice>,val linked:Boolean)
+
+    /** Recent eligible DEMO documents only. No automatic selection or allocation. */
+    fun selection(context:Context,db:RecordDatabase,receiptId:String):Selection=SecureRecords.withRecordLock {
+        check(BuildConfig.DEMO_MODE)
+        val sql=db.writableDatabase
+        sql.beginTransaction()
+        try {
+            if(!FiscalCutover.active(sql)) {
+                sql.setTransactionSuccessful()
+                return@withRecordLock Selection(emptyList(),false)
+            }
+            val rows=receipts(context,db,sql)
+            val receipt=requireNotNull(rows[receiptId])
+            val existing=sql.rawQuery("SELECT documentId,eventId,payload FROM "+TABLE+" WHERE receiptId=?",arrayOf(receiptId)).use{c->
+                if(!c.moveToFirst())null else {
+                    val j=JSONObject(SecureRecords(context,NS,db).openSnapshot(receiptId,c.getString(2)))
+                    require(j.getString("receiptId")==receiptId && j.getString("documentId")==c.getString(0) && j.getString("eventId")==c.getString(1))
+                    checkSnapshot(context,db,sql,rows,j)
+                    c.getString(0)
+                }
+            }
+            fun choice(id:String):Choice=sql.rawQuery("SELECT number,premise,registerNo,year,created,payload FROM fiscal_document WHERE id=?",arrayOf(id)).use{c->
+                require(c.moveToFirst())
+                val p=JSONObject(SecureRecords(context,"fiskai_demo_receipts",db).openSnapshot(id,c.getString(5)))
+                val date=SimpleDateFormat("yyyy-MM-dd",Locale.ROOT).apply{timeZone=TimeZone.getTimeZone("Europe/Zagreb")}.format(Date(c.getLong(4)))
+                Choice(id,c.getLong(0).toString()+"/"+c.getString(1)+"/"+c.getString(2)+" ("+c.getInt(3)+")",p.getString("customer"),date)
+            }
+            val choices=if(existing!=null)listOf(choice(existing)) else {
+                val ids=sql.rawQuery("SELECT id FROM fiscal_document WHERE NOT EXISTS(SELECT 1 FROM demo_payment_preparation p WHERE p.documentId=fiscal_document.id) ORDER BY created DESC,id DESC LIMIT 100",null).use{c->
+                    buildList{while(c.moveToNext())add(c.getString(0))}
+                }
+                ids.mapNotNull{id->
+                    try {
+                        snapshot(context,db,sql,receipt,id,"00000000-0000-4000-8000-000000000001")
+                        choice(id)
+                    } catch(_:IllegalArgumentException){null} catch(_:org.json.JSONException){null}
+                }
+            }
+            sql.setTransactionSuccessful()
+            Selection(choices,existing!=null)
+        }finally{sql.endTransaction()}
+    }
+
     /** Explicitly invoked only in isolated DEMO build; never sends or claims a server event. */
     fun prepare(context:Context,db:RecordDatabase,receiptId:String,documentId:String):String=SecureRecords.withRecordLock {
         check(BuildConfig.DEMO_MODE) { "Preparation requires isolated DEMO" }
