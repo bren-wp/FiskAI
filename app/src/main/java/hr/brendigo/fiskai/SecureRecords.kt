@@ -54,6 +54,15 @@ internal class SecureRecords(
         cipher.updateAAD(aad(name))
         return cipher.doFinal(raw.copyOfRange(12,raw.size)).toString(Charsets.UTF_8)
     }
+    // Seal before opening a SQL transaction to preserve lock ordering.
+    internal fun sealSnapshot(id: String, value: String): String = synchronized(lock) {
+        validateJson(value)
+        encrypt("snapshot:"+id,value)
+    }
+    internal fun openSnapshot(id: String, value: String): String = synchronized(lock) {
+        check(value.startsWith(PREFIX))
+        decrypt("snapshot:"+id,value).also(::validateJson)
+    }
     private fun validateJson(value: String) {
         val parser = org.json.JSONTokener(value)
         val decoded = parser.nextValue()

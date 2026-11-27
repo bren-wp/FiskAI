@@ -7,7 +7,7 @@ import android.database.sqlite.SQLiteOpenHelper
 
 /** Stores authenticated ciphertext only. No destructive schema fallback. */
 internal class RecordDatabase(context: Context, databaseName: String = "fiskai_records.db") :
-    SQLiteOpenHelper(context.applicationContext, databaseName, null, 2) {
+    SQLiteOpenHelper(context.applicationContext, databaseName, null, 3) {
 
     companion object {
         @Volatile private var instance: RecordDatabase? = null
@@ -20,15 +20,24 @@ internal class RecordDatabase(context: Context, databaseName: String = "fiskai_r
         db.execSQL("CREATE TABLE records (namespace TEXT NOT NULL, record_key TEXT NOT NULL, payload TEXT NOT NULL, PRIMARY KEY(namespace,record_key))")
         db.execSQL("CREATE TABLE legacy_migration (namespace TEXT NOT NULL, record_key TEXT NOT NULL, PRIMARY KEY(namespace,record_key))")
         createCisJournal(db)
+        createDemoLedger(db)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        if(oldVersion == 1 && newVersion == 2) createCisJournal(db)
-        else error("Unsupported schema upgrade from " + oldVersion + " to " + newVersion)
+        require(oldVersion in 1..2 && newVersion == 3)
+        if(oldVersion == 1) createCisJournal(db)
+        createDemoLedger(db)
     }
 
     private fun createCisJournal(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE cis_echo (id TEXT PRIMARY KEY NOT NULL, created INTEGER NOT NULL, state TEXT NOT NULL CHECK(state IN ('QUEUED','SENDING','VERIFIED','UNCERTAIN')), completed INTEGER, outcome TEXT)")
+    }
+
+    private fun createDemoLedger(db: SQLiteDatabase) {
+        db.execSQL("CREATE TABLE demo_sequence (year INTEGER NOT NULL, premise TEXT NOT NULL, register_no TEXT NOT NULL, last_no INTEGER NOT NULL CHECK(last_no>=1), PRIMARY KEY(year,premise,register_no))")
+        db.execSQL("CREATE TABLE demo_receipt (id TEXT PRIMARY KEY NOT NULL, draft_id TEXT NOT NULL UNIQUE, year INTEGER NOT NULL, premise TEXT NOT NULL, register_no TEXT NOT NULL, number INTEGER NOT NULL CHECK(number>=1), created INTEGER NOT NULL, payload TEXT NOT NULL, UNIQUE(year,premise,register_no,number))")
+        db.execSQL("CREATE TRIGGER demo_receipt_no_update BEFORE UPDATE ON demo_receipt BEGIN SELECT RAISE(ABORT,'Immutable test snapshot'); END")
+        db.execSQL("CREATE TRIGGER demo_receipt_no_delete BEFORE DELETE ON demo_receipt BEGIN SELECT RAISE(ABORT,'Immutable test snapshot'); END")
     }
 
     private fun values(namespace: String, key: String) = ContentValues().apply {
