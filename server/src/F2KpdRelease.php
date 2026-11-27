@@ -14,7 +14,10 @@ final class F2KpdRelease {
     }
     private static function active(string $json,string $date):array {
         $rows=[];
+        $yearEnd=substr($date,0,4).'-12-31';
         foreach(KpdCatalog::decode($json) as [$code,$from,$until,$name]){
+            if(($from>$date&&$from<=$yearEnd)||($from<=$date&&$until!==null&&$until>=$date&&$until<$yearEnd))
+                throw new DomainException('Intra-year KPD changes require a new reviewed release model.');
             if($from>$date||($until!==null&&$until<$date))continue;
             if(isset($rows[$code]))throw new DomainException('Overlapping KPD code periods.');
             $rows[$code]=$name;
