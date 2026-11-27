@@ -9,8 +9,8 @@ android {
         applicationId = "hr.brendigo.fiskai"
         minSdk = 24
         targetSdk = 36
-        versionCode = 5
-        versionName = "0.1.0-alpha05"
+        versionCode = 6
+        versionName = "0.1.0-alpha06"
     }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     buildFeatures { compose = true }

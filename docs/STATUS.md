@@ -1,7 +1,7 @@
-# Alpha05 acceptance status
+# Alpha06 acceptance status
 
-Source additions: local fiscal setup, premises, registers and operators; reference integrity and duplicate checks; encrypted persistence; local create/list/delete screens and domain tests. These settings are NOT registered with the tax authority and are not tied to issued invoice sequences yet. Validation is intentionally a conservative local subset, not legal certification.
+Added local PKCS#12 credential inspection: bounded file input, password handling, RSA key size and key/certificate match challenge, X.509 metadata, date validity and SHA-256 fingerprint. No private-key or password storage; no activation, no trust/issuer authorization or revocation checking yet. No production certificates should be used before acceptance.
 
-CI run 8 reached Gradle after SDK setup succeeded; AAR metadata requires compile SDK 37.1. Correct package platforms;android-37.1 and AGP minorApiLevel DSL now configured. targetSdk remains 36. No downgrade or AAR check bypass. Pending build verification.
+CI run 10 installed API 37.1 successfully but failed resolving Kotlin Compose plugin marker 2.4.21. Map the plugin ID directly to the versioned Maven Central compose-compiler-gradle-plugin module; keep stable versions and fail on resolution errors. New CI pending.
 
-Remaining: Room transactional DB, migrations and device tests, edit/retire workflow, certificates, test CIS and eInvoice integrations, backup, web, real branding assets and visual acceptance. No production issuance or stable release.
+Remaining: actual device tests, real test certificate fixtures, trust and OIB validation, certificate vault, Room transactional storage, test CIS and eInvoice integrations, backup, web, real branding assets and visual acceptance. No production issuance or stable release.
