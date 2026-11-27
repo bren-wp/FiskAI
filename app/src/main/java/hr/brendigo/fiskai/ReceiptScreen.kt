@@ -59,6 +59,20 @@ internal fun ReceiptScreen(page:String,business:BusinessProfile,onBusy:(Boolean)
                 .onFailure{message="Odgovarajući DEMO računi nisu dostupni."}
         }finally{working(false)}}
     }
+    var documentExportSubject by remember{mutableStateOf("")}
+    val documentExport=rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")){uri->
+        if(uri==null)working(false) else {
+            val subject=documentExportSubject;documentExportSubject=""
+            scope.launch{try{
+                withContext(Dispatchers.IO){runCatching{
+                    val envelope=DemoDocumentExchange.export(context,RecordDatabase.shared(context),business.oib,subject)
+                    val output=context.contentResolver.openOutputStream(uri,"wt")?:error("Missing destination")
+                    output.use{it.write(envelope.toByteArray(Charsets.UTF_8));it.flush()}
+                }}.onSuccess{message="Potpisani DEMO dokumenti izvezeni su za pregled."}
+                    .onFailure{message="Izvoz nije potvrđen. Provjerite dokumente i odredište."}
+            }finally{working(false)}}
+        }
+    }
     val picker=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()){uri->
         if(uri==null)working(false) else perform{
             val bytes=context.contentResolver.openInputStream(uri)?.use(ReceiptRules::read)?:error("Missing file")
@@ -158,6 +172,11 @@ internal fun ReceiptScreen(page:String,business:BusinessProfile,onBusy:(Boolean)
                         .onFailure{message="Ključ uređaja nije dostupan."}
                 }finally{working(false)}}
             }){Text("Pripremi javni ključ uređaja")}
+            OutlinedButton(enabled=!busy&&syncSubject.isNotBlank(),onClick={
+                documentExportSubject=syncSubject;syncToken="";syncDialog=false
+                working(true);documentExport.launch("FiskAI-DEMO-dokumenti.json")
+            }){Text("Izvezi potpisane DEMO dokumente")}
+            Text("Izvoz sadrži sadržaj testnih računa. Datoteka je potpisana, nije šifrirana. Koristite samo testne podatke.")
             enrollment?.let{key->
                 Text(if(key.hardwareBacked)"Ključ zaštićen hardverom" else "Ključ zaštićen sustavom Android Keystore")
                 TextButton(enabled=!busy,onClick={
