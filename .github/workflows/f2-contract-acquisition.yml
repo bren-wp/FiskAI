@@ -11,6 +11,7 @@ on:
       - 'scripts/test-f2-uploaded.py'
       - 'scripts/prepare-f2-hr-schematron.py'
       - 'scripts/run-f2-schematron.py'
+      - 'scripts/test-f2-dual-schematron.py'
   workflow_dispatch:
 permissions:
   contents: read
@@ -143,4 +144,52 @@ jobs:
           name: FiskAI-EN16931-v1.3.17-UNREVIEWED
           path: en16931-candidate/
           if-no-files-found: error
+          retention-days: 7
+  dual-schematron-diagnostic:
+    needs: [acquire, en16931-candidate]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
+        with:
+          name: FiskAI-F2-originals-UNREVIEWED
+          path: f2-contract-candidates
+      - uses: actions/download-artifact@v8
+        with:
+          name: FiskAI-EN16931-v1.3.17-UNREVIEWED
+          path: en16931-candidate
+      - uses: actions/checkout@v7
+        with:
+          repository: Schematron/schematron
+          ref: 77dcd36c53d12ed786c144ece3b2af7694abdc56
+          persist-credentials: false
+          path: iso-schematron
+      - name: Install pinned diagnostic runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = x86_64
+          /usr/bin/python3 -c 'import sys; assert sys.version_info[:2] == (3,12)'
+          opts=(-o Dir::Etc::sourcelist=/etc/apt/sources.list.d/ubuntu.sources -o Dir::Etc::sourceparts=- -o Acquire::Retries=3)
+          sudo apt-get "${opts[@]}" update
+          sudo apt-get "${opts[@]}" install -y --no-install-recommends python3-lxml python3-venv
+          /usr/bin/python3 -m venv --system-site-packages .f2-runtime
+          printf '%s\n' 'saxonche==12.9.0 --hash=sha256:490f30e9486750f6a066de2b467114dfd6e14d23c8ce645cad64e663f580490a' > f2-runtime.requirements
+          .f2-runtime/bin/python -m pip --isolated install --index-url https://pypi.org/simple --require-hashes --only-binary=:all: --no-deps -r f2-runtime.requirements
+          test "$(git -C iso-schematron rev-parse HEAD)" = 77dcd36c53d12ed786c144ece3b2af7694abdc56
+      - name: Execute both rule sets on synthetic documents in a network namespace
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -m 700 diagnostic-home
+          sudo unshare --net --setgid "$(id -g)" --setuid "$(id -u)" -- env -i HOME="$PWD/diagnostic-home" PATH=/usr/bin:/bin LANG=C.UTF-8 timeout 180 "$PWD/.f2-runtime/bin/python" scripts/test-f2-dual-schematron.py f2-contract-candidates en16931-candidate/EN16931-UBL-validation.xslt iso-schematron/trunk/schematron/code f2-dual-diagnostics
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: FiskAI-F2-dual-SVRL-NOT-APPROVAL
+          path: f2-dual-diagnostics/
+          if-no-files-found: warn
           retention-days: 7
