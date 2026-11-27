@@ -32,6 +32,8 @@ internal fun ReceiptScreen(page:String,business:BusinessProfile,onBusy:(Boolean)
     var selected by remember{mutableStateOf<BankEvidence?>(null)}
     var note by remember{mutableStateOf("")}
     var syncDialog by remember{mutableStateOf(false)}
+    var remoteDocuments by remember(business.oib){mutableStateOf<List<DemoDocumentJournal.Document>?>(null)}
+    var documentIndex by remember(business.oib){mutableStateOf(0)}
     var syncUrl by remember{mutableStateOf("")}
     var syncSubject by remember{mutableStateOf("")}
     var syncToken by remember{mutableStateOf("")}
@@ -172,6 +174,18 @@ internal fun ReceiptScreen(page:String,business:BusinessProfile,onBusy:(Boolean)
                         .onFailure{message="Ključ uređaja nije dostupan."}
                 }finally{working(false)}}
             }){Text("Pripremi javni ključ uređaja")}
+            OutlinedButton(enabled=!busy&&syncToken.matches(Regex("[0-9a-f]{64}"))&&syncUrl.isNotBlank()&&syncSubject.isNotBlank(),onClick={
+                val url=syncUrl;val subject=syncSubject;val token=syncToken
+                syncToken="";syncDialog=false;working(true)
+                scope.launch{try{
+                    withContext(Dispatchers.IO){runCatching{DemoDocumentJournal(context).synchronize(url,subject,business.oib,token)}}
+                        .onSuccess{result->
+                            message="Potvrđeni dokumenti: "+result.matched+" · Samo na serveru: "+result.remoteOnly.size
+                            remoteDocuments=result.remoteOnly;documentIndex=0
+                        }
+                        .onFailure{message="Sinkronizacija dokumenata nije potvrđena. Lokalni računi ostaju nepromijenjeni."}
+                }finally{working(false)}}
+            }){Text("Sinkroniziraj DEMO dokumente")}
             OutlinedButton(enabled=!busy&&syncSubject.isNotBlank(),onClick={
                 documentExportSubject=syncSubject;syncToken="";syncDialog=false
                 working(true);documentExport.launch("FiskAI-DEMO-dokumenti.json")
@@ -196,6 +210,26 @@ internal fun ReceiptScreen(page:String,business:BusinessProfile,onBusy:(Boolean)
                 .onFailure{message="Prijenos nije u cijelosti potvrđen. Lokalni zapisi ostaju sačuvani. Provjerite adresu, pristup ili sukob zapisa pa pokušajte ponovno."}
         }finally{working(false)}}
     }){Text("Usporedi i sinkroniziraj")}},dismissButton={TextButton(enabled=!busy,onClick={syncDialog=false;syncToken=""}){Text("Odustani")}})
+    remoteDocuments?.let{documents->
+        val document=documents.getOrNull(documentIndex)
+        AlertDialog(onDismissRequest={remoteDocuments=null},title={Text("Serverski DEMO dokumenti")},text={
+            Column(verticalArrangement=Arrangement.spacedBy(8.dp)){
+                Text("Pregled dokumenata koji nisu u lokalnoj evidenciji. Ne dodjeljuje im nove brojeve niti ih knjiži.")
+                if(document==null)Text("Nema dodatnih dokumenata.")
+                else{
+                    val snapshot=org.json.JSONObject(document.snapshot)
+                    Text(document.number,fontWeight=FontWeight.Bold)
+                    Text(snapshot.optString("customer").take(120))
+                    Text(euro(snapshot.optString("total")))
+                    Text((documentIndex+1).toString()+" / "+documents.size)
+                    Row(horizontalArrangement=Arrangement.spacedBy(4.dp)){
+                        TextButton(enabled=documentIndex>0,onClick={documentIndex--}){Text("Prethodni")}
+                        TextButton(enabled=documentIndex<documents.lastIndex,onClick={documentIndex++}){Text("Sljedeći")}
+                    }
+                }
+            }
+        },confirmButton={TextButton(onClick={remoteDocuments=null}){Text("Zatvori")}})
+    }
     if(manual)AlertDialog(onDismissRequest={if(!busy)manual=false},title={Text("Gotovinski primitak")},text={
         Column(verticalArrangement=Arrangement.spacedBy(4.dp)){
             Text("Unesite stvarno primljeni iznos i jedinstvenu oznaku dokaza. Ovaj zapis nije fiskalni račun i ne može se mijenjati.")
