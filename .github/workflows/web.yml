@@ -2,10 +2,10 @@ name: Web
 on:
   workflow_call:
   pull_request:
-    paths: ['web/**','server/**','scripts/test-demo-sync-https.py','scripts/educ-witness.py','scripts/test-educ-witness.py','.github/workflows/web.yml','scripts/check-legal-catalog.py','app/src/main/java/hr/brendigo/fiskai/LegalRuleCatalog.kt']
+    paths: ['web/**','server/**','scripts/test-demo-sync-https.py','scripts/educ-witness.py','scripts/test-educ-witness.py','scripts/educ-witness-https.py','scripts/test-educ-witness-https.py','.github/workflows/web.yml','scripts/check-legal-catalog.py','app/src/main/java/hr/brendigo/fiskai/LegalRuleCatalog.kt']
   push:
     branches: [main, feature/native-alpha]
-    paths: ['web/**','server/**','scripts/test-demo-sync-https.py','scripts/educ-witness.py','scripts/test-educ-witness.py','.github/workflows/web.yml']
+    paths: ['web/**','server/**','scripts/test-demo-sync-https.py','scripts/educ-witness.py','scripts/test-educ-witness.py','scripts/educ-witness-https.py','scripts/test-educ-witness-https.py','.github/workflows/web.yml']
 permissions:
   contents: read
 jobs:
@@ -51,7 +51,11 @@ jobs:
       - run: php server/tests/ServerRecoveryTest.php
       - run: php server/tests/EducExternalCheckpointTest.php
       - run: php server/tests/EducInvoiceMathTest.php
+      - run: php server/tests/EducCreditLimitsTest.php
+      - run: php server/tests/EducRemoteCheckpointTest.php
+      - run: php server/tests/F2InvoicePreflightTest.php
       - run: python3 scripts/test-educ-witness.py
+      - run: python3 scripts/test-educ-witness-https.py
       - run: php server/tests/DemoDocumentExchangeTest.php
       - run: python3 scripts/test-demo-sync-https.py
       - run: php server/tests/FiscalContractTest.php
