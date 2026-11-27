@@ -13,6 +13,8 @@ on:
       - 'scripts/run-f2-schematron.py'
       - 'scripts/test-f2-dual-schematron.py'
       - 'scripts/fixtures/f2-positive-invoice.xml'
+      - 'server/src/F2ValidationEvidence.php'
+      - 'server/tests/F2ActualDualEvidenceTest.php'
   workflow_dispatch:
 permissions:
   contents: read
@@ -178,7 +180,7 @@ jobs:
           /usr/bin/python3 -c 'import sys; assert sys.version_info[:2] == (3,12)'
           opts=(-o Dir::Etc::sourcelist=/etc/apt/sources.list.d/ubuntu.sources -o Dir::Etc::sourceparts=- -o Acquire::Retries=3)
           sudo apt-get "${opts[@]}" update
-          sudo apt-get "${opts[@]}" install -y --no-install-recommends python3-lxml python3-venv
+          sudo apt-get "${opts[@]}" install -y --no-install-recommends python3-lxml python3-venv php-cli php-xml
           /usr/bin/python3 -m venv --system-site-packages .f2-runtime
           printf '%s\n' 'saxonche==12.9.0 --hash=sha256:490f30e9486750f6a066de2b467114dfd6e14d23c8ce645cad64e663f580490a' > f2-runtime.requirements
           .f2-runtime/bin/python -m pip --isolated install --index-url https://pypi.org/simple --require-hashes --only-binary=:all: --no-deps -r f2-runtime.requirements
@@ -189,6 +191,11 @@ jobs:
           set -euo pipefail
           mkdir -m 700 diagnostic-home
           sudo unshare --net --setgid "$(id -g)" --setuid "$(id -u)" -- env -i HOME="$PWD/diagnostic-home" PATH=/usr/bin:/bin LANG=C.UTF-8 timeout 180 "$PWD/.f2-runtime/bin/python" scripts/test-f2-dual-schematron.py f2-contract-candidates en16931-candidate/EN16931-UBL-validation.xslt iso-schematron/trunk/schematron/code f2-dual-diagnostics
+      - name: Verify the actual SVRL bytes with the PHP intake evidence adapter
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo unshare --net --setgid "$(id -g)" --setuid "$(id -u)" -- env -i HOME="$PWD/diagnostic-home" PATH=/usr/bin:/bin LANG=C.UTF-8 timeout 30 php server/tests/F2ActualDualEvidenceTest.php scripts/fixtures/f2-positive-invoice.xml f2-dual-diagnostics
       - uses: actions/upload-artifact@v6
         if: always()
         with:
