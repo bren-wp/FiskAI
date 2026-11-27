@@ -11,3 +11,7 @@ Preostalo: potpuna Room normalizacija drugih domena, uklanjanje paralelnih prist
 ## Room v9 — DEMO priprema naplate
 
 Nova tablica `demo_payment_preparation` referencira `receipt_event` i `fiscal_document` stranim ključevima, uz jedinstveni dokument i identitet događaja. Migracija 8→9 dodaje tablicu i ne mijenja postojeće retke. Triggers blokiraju UPDATE, DELETE i REPLACE. Zajednička SQLite transakcija i autentificirani šifrat čuvaju vezu. `ReceiptStore.prepareDemoPayment` dopušten je samo u izoliranom DEMO paketu; provjerava vlasnika, cijeli iznos, datum, sažetke i nominalni rok. Ne podržava djelomičnu naplatu, storno, više naplata, izlazni eRačun ni slanje na server. Room compiler provjerava v9 za sve varijante. Potrebna je potvrda CI i migracijskih testova.
+
+## Room v10 — djelomične i višestruke naplate
+
+Migracija 9→10 mijenja samo indeks dokumenta i zaštitni INSERT trigger: jedan dokument može imati više različitih potvrđenih primitaka, dok identitet primitka i događaja ostaju jedinstveni. Svi postojeći šifrirani retci ostaju nepromijenjeni. Domenski sloj unutar jedne SQLite transakcije ponovno provjerava autentificirane snimke i zbroj naplata u centima; iznos iznad ukupnog iznosa odbija se. Svaki pojedini primitak se u cijelosti dodjeljuje jednom dokumentu; raspodjela jednog primitka na više dokumenata i storno nisu implementirani. Bez autoriziranog transporta.
