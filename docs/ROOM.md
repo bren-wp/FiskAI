@@ -1,0 +1,7 @@
+# Room — prva faza fiskalnog outboxa
+
+AndroidX Room 2.8.4 runtime i Java annotation processor, zasebna baza fiskai_fiscal_room.db. Postojeća baza v5 ostaje autoritativna za DEMO numeriranje i šifrirane zapise. Room sadrži normalizirani nepromjenjivi dokument i jedan pripadajući red outboxa, s foreign keyem, jedinstvenim brojem i ID-em nacrta. Dokument se priprema isključivo iz postojeće zaključane snimke čiji su broj i godina autentificirani; Room zapisuje postojeći šifrat, ne otvoreni sadržaj. Upis dokumenta i outboxa je jedna Room transakcija; ponavljanje pripreme vraća postojeći status. Prekid između zaključavanja i pripreme nije gubitak dokumenta — lokalna priprema može se ponovno pokrenuti.
+
+Statusi QUEUED → SENDING → UNCERTAIN, claim token, CAS prijelazi i fail-closed oporavak. Nema automatskog ponovnog slanja, JIR-a ni statusa prihvaćanja bez verificiranog transporta. UI dopušta samo lokalnu pripremu, ne mrežno slanje. Nema produkcijskog numeriranja. Nema fallbackToDestructiveMigration.
+
+Ovo je početna Room integracija, ne potpuna migracija. Room schema export i sve buduće Room migracije, zajednički backup Room outboxa, transakcijsko izdavanje i outbox u jednoj bazi, migracija ostalih tablica i službeni XML ugovori ostaju obvezni. Trenutni backup obuhvaća izvornu DEMO snimku, ne Room outbox stanje; nema slanja stvarnih računa dok se ovo ne dovrši. Korisnički certifikati nisu prenošeni.

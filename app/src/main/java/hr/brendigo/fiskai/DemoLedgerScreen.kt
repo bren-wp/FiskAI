@@ -14,6 +14,8 @@ import kotlinx.coroutines.withContext
 internal fun DemoLedgerScreen(drafts:List<Draft>,business:BusinessProfile,fiscalStore:FiscalSetupStore) {
     val context=LocalContext.current
     val ledger=remember(context){DemoLedger(context.applicationContext)}
+    val outbox=remember(context){FiscalOutbox(context.applicationContext)}
+    var queueStates by remember{mutableStateOf<Map<String,String>>(emptyMap())}
     val scope=rememberCoroutineScope()
     var setup by remember{mutableStateOf<FiscalSetup?>(null)}
     var rows by remember{mutableStateOf<List<Pair<DemoReceipt,String>>>(emptyList())}
@@ -26,6 +28,7 @@ internal fun DemoLedgerScreen(drafts:List<Draft>,business:BusinessProfile,fiscal
     LaunchedEffect(ledger){
         val result=withContext(Dispatchers.IO){runCatching{fiscalStore.read() to ledger.history().map{it to ledger.total(it)}}}
         result.onSuccess{setup=it.first;rows=it.second}.onFailure{message="Pohrana nije dostupna."}
+        queueStates=withContext(Dispatchers.IO){runCatching{rows.mapNotNull{(row,_)->outbox.status(row.id)?.let{row.id to it}}.toMap()}.getOrDefault(emptyMap())}
         busy=false
     }
     Text("DEMO računi",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold)
@@ -62,5 +65,16 @@ internal fun DemoLedgerScreen(drafts:List<Draft>,business:BusinessProfile,fiscal
         Text("DEMO "+row.number+"/"+row.premise+"/"+row.register,fontWeight=FontWeight.Bold)
         Text(row.year.toString()+" · "+total+" EUR")
         Text("Nije fiskalizirano")
+        val state=queueStates[row.id]
+        if(state==null) OutlinedButton(enabled=!busy,onClick={
+            busy=true
+            scope.launch {
+                try {
+                    val result=withContext(Dispatchers.IO){runCatching{outbox.prepare(row.id)}}
+                    result.onSuccess{queueStates=queueStates+(row.id to it);message="Lokalna priprema spremljena."}.onFailure{message="Lokalna priprema nije uspjela. Starije snimke bez autentificiranog broja nisu podržane."}
+                } finally {busy=false}
+            }
+        },modifier=Modifier.fillMaxWidth()){Text("Pripremi lokalni testni zahtjev")}
+        else Text(when(state){"QUEUED"->"Lokalno pripremljeno – nije poslano";"SENDING"->"Slanje nije potvrđeno";else->"Ishod nije potvrđen"})
     }}
 }

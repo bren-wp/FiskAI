@@ -10,3 +10,5 @@ Pin source versions, preserve notices, verify dependency licenses and run securi
 
 ## Integrated dependency
 ZXing core 3.5.4 — Apache-2.0, https://github.com/zxing/zxing . No copied source files; used as a Maven library for QR and PDF417 encoding/decoding. License information is also included in the distributable library metadata; retain upstream notices in distribution. See https://github.com/zxing/zxing/blob/master/LICENSE .
+
+AndroidX Room 2.8.4 — Apache-2.0; runtime i Java compiler iz Google Maven repozitorija. https://developer.android.com/jetpack/androidx/releases/room . Potpuni pregled tranzitivnih licenci ostaje release obveza.
