@@ -81,8 +81,10 @@ def main():
     parser.add_argument("--tls-key",required=True,type=Path)
     args=parser.parse_args()
     w.private_file(args.token_file)
-    with args.token_file.open("r",encoding="ascii") as f:
-        token=f.read(65)
+    with args.token_file.open("rb") as f:
+        secret=f.read(33)
+    w.require(len(secret)==32,"Expected 32-byte token file")
+    token=secret.hex()
     with server((args.bind,args.port),args.database,args.key,args.subject,token,args.tls_cert,args.tls_key) as httpd:
         httpd.serve_forever()
 
