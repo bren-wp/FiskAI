@@ -6,7 +6,8 @@ import json
 from pathlib import Path, PurePosixPath
 import stat
 import zipfile
-from urllib.parse import unquote, urlsplit
+from urllib.parse import urlsplit
+import re
 from lxml import etree as ET
 
 PINS = {
@@ -15,7 +16,7 @@ PINS = {
     'efiskalizacija-2026-02-12.zip': '7ca59ff821069acee929fc53f9872670206b831d034f70c27960cb1d2346eebd',
     'eizvjestavanje-2026-02-12.zip': 'a559b9ef7dc413ada4b81cc6ce56030f1efc1e0abf8e7f2712d834080ae79103',
 }
-BASE = 'file:///fiskai-f2-virtual/'
+BASE = '/fiskai-f2-virtual/'
 XSD = 'http://www.w3.org/2001/XMLSchema'
 SCH = 'http://purl.oclc.org/dsdl/schematron'
 WSDL = 'http://schemas.xmlsoap.org/wsdl/'
@@ -62,16 +63,25 @@ def load(root):
     return files, inventory
 
 
+def virtual_name(name):
+    # Keep relative import structure but remove non-ASCII directory names from
+    # libxml's virtual base URI. Never reinterpret percent-encoded paths.
+    return '/'.join(part if re.fullmatch(r'[A-Za-z0-9._-]+', part) and not part.startswith('_fiskai_')
+                    else '_fiskai_' + part.encode('utf-8').hex() for part in name.split('/'))
+
+
 class LocalOnly(ET.Resolver):
     def __init__(self, resources):
-        self.resources = resources
+        self.resources = {virtual_name(name): data for name, data in resources.items()}
+        require(len(self.resources) == len(resources), 'Virtual resource collision')
 
     def resolve(self, url, public_id, context):
         parsed = urlsplit(url)
-        require(parsed.scheme == 'file' and not parsed.netloc and not parsed.query and not parsed.fragment, 'External XML resource blocked')
-        path = unquote(parsed.path)
-        require(path.startswith('/fiskai-f2-virtual/'), 'Outside XML resource blocked')
-        name = path.removeprefix('/fiskai-f2-virtual/')
+        require(parsed.scheme in ('', 'file') and not parsed.netloc and not parsed.query and not parsed.fragment,
+                'External XML resource blocked')
+        path = parsed.path
+        require(path.startswith(BASE) and '%' not in path, 'Outside or encoded XML resource blocked')
+        name = path.removeprefix(BASE)
         require(name in self.resources, 'Unlisted XML resource: ' + name)
         return self.resolve_string(self.resources[name], context, base_url=BASE + name)
 
@@ -79,7 +89,7 @@ class LocalOnly(ET.Resolver):
 def parse_resource(files, name):
     parser = ET.XMLParser(resolve_entities=False, load_dtd=False, no_network=True, huge_tree=False)
     parser.resolvers.add(LocalOnly(files))
-    return ET.fromstring(files[name], parser, base_url=BASE + name)
+    return ET.fromstring(files[name], parser, base_url=BASE + virtual_name(name))
 
 
 def parse_document(data):
