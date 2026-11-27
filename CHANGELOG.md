@@ -1,6 +1,7 @@
 # Promjene
 
 ## 0.1.1 — kandidat (nije objavljeno)
+- Stroga provjera XML referenci i deklaracije prije DOM parsiranja; odbijanje nepoznatih entiteta, nedopuštenih Unicode referenci i processing instructions. Instrumentacijski testovi sada identificiraju pojedinačni neispravan ulaz; dodani JVM regresijski testovi.
 - Ispravljen Android DOM parser koji ne podržava SAX external-general-entities; zajednički ograničeni UTF-8 parser za UBL i CIS Echo, zabrana DTD/vanjskih entiteta, testovi na emulatoru.
 - Room v8: šifrirani bankovni izvodi i nepromjenjiva evidencija potvrđenih primitaka, CSV uvoz, deduplikacija, ručna klasifikacija, radni KPR pregled, backup/restore. Nije službeni porezni obrazac.
 - Offline JIR verifier: službeni XSD, neovisni certifikat i SHA-256 pin, XMLDSig, korelacija ID-a poruke i negativni testovi. Bez stvarnog slanja.
