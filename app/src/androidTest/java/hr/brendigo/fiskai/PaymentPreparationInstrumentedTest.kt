@@ -84,6 +84,19 @@ class PaymentPreparationInstrumentedTest {
             assertEquals(1150L,receipts.demoPaymentSelection(finalPayment.id).choices.single().remainingCents)
             val finalEvent=receipts.prepareDemoPayment(finalPayment.id,second)
             assertEquals(0L,receipts.demoPaymentSelection(finalPayment.id).choices.single().remainingCents)
+            val syncEvents=receipts.demoSyncEvents(business)
+            assertEquals(3,syncEvents.size)
+            assertTrue(receipts.demoSyncEvents(business.copy(oib="00000000001")).isEmpty())
+            val subject="71000000-0000-4000-8000-000000000001"
+            val request=DemoSyncClient.request(subject,syncEvents)
+            assertEquals(subject,request.getString("subjectId"))
+            assertFalse(request.toString().contains(business.oib))
+            assertFalse(request.toString().contains("Sintetički dokaz"))
+            val ack=JSONObject().put("protocol",1).put("subjectId",subject).put("status","DEMO_METADATA_STORED")
+                .put("accepted",org.json.JSONArray(syncEvents.map{it.getString("eventId")}))
+            DemoSyncClient.verifyAck(subject,syncEvents,ack)
+            val badAck=JSONObject(ack.toString()).put("subjectId","71000000-0000-4000-8000-000000000002")
+            assertTrue(runCatching{DemoSyncClient.verifyAck(subject,syncEvents,badAck)}.isFailure)
             val exported=SecureRecords.exportWorkspace(ctx,source)
             val root=JSONObject(exported)
             assertEquals(5,root.getInt("version"))
@@ -107,6 +120,15 @@ class PaymentPreparationInstrumentedTest {
         }finally{
             room.close();targetRoom.close();legacyRoom.close();source.close();target.close();legacy.close()
             ctx.deleteDatabase(sourceName);ctx.deleteDatabase(targetName);ctx.deleteDatabase(legacyName)
+        }
+    }
+    @Test fun demoSyncEndpointRestrictions() {
+        assertEquals("https://example.test/fiskai/api.php?action=demo-sync",DemoSyncClient.endpoint("https://example.test/fiskai/api.php").toString())
+        for(url in listOf("http://example.test/api.php","https://user@example.test/api.php",
+            "https://example.test/api.php?extra=1","https://example.test/api.php#fragment",
+            "https://example.test:8080/api.php","https://example.test/other.php",
+            "https://example.test/../api.php","https://example.test/%61pi.php")) {
+            assertTrue(url,runCatching{DemoSyncClient.endpoint(url)}.isFailure)
         }
     }
 }
