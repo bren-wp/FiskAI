@@ -167,4 +167,28 @@ class PaymentPreparationInstrumentedTest {
             assertTrue(runCatching{DemoSyncJournal(ctx).reconcileAndSave(url,subject,owner,listOf(local),validated)}.isFailure)
         }finally{android.util.AtomicFile(file).delete()}
     }
+    @Test fun installationKeySignsExactChallengeAndCannotExportPrivateKey() {
+        if(!BuildConfig.DEMO_MODE)return
+        val enrolled=DemoDeviceIdentity.enrollment()
+        assertEquals(enrolled,DemoDeviceIdentity.enrollment())
+        val bytes=android.util.Base64.decode(enrolled.publicKey,android.util.Base64.NO_WRAP)
+        assertEquals(DemoDeviceIdentity.digest(bytes),enrolled.fingerprint)
+        val publicKey=java.security.KeyFactory.getInstance("EC").generatePublic(java.security.spec.X509EncodedKeySpec(bytes))
+        val subject="81000000-0000-4000-8000-000000000001"
+        val device="81000000-0000-4000-8000-000000000002"
+        val nonce="a".repeat(64);val token="b".repeat(64)
+        val body="{\"protocol\":1,\"subjectId\":\"$subject\"}".toByteArray(Charsets.UTF_8)
+        val msg=DemoDeviceIdentity.message("demo-sync-pull",subject,device,nonce,token,body)
+        val expected=listOf("FISKAI-DEMO-PROOF-V1","demo-sync-pull",subject,device,nonce,
+            DemoDeviceIdentity.digest(token.toByteArray()),DemoDeviceIdentity.digest(body)).joinToString("\n")
+        assertArrayEquals(expected.toByteArray(Charsets.UTF_8),msg)
+        val sig=android.util.Base64.decode(DemoDeviceIdentity.sign(msg),android.util.Base64.NO_WRAP)
+        fun verify(value:ByteArray)=java.security.Signature.getInstance("SHA256withECDSA").run{initVerify(publicKey);update(value);verify(sig)}
+        assertTrue(verify(msg))
+        assertFalse(verify(DemoDeviceIdentity.message("demo-sync",subject,device,nonce,token,body)))
+        assertFalse(verify(DemoDeviceIdentity.message("demo-sync-pull",subject,device,"c".repeat(64),token,body)))
+        assertFalse(verify(DemoDeviceIdentity.message("demo-sync-pull",subject,device,nonce,token,body+byteArrayOf(32))))
+        val store=java.security.KeyStore.getInstance("AndroidKeyStore").apply{load(null)}
+        assertNull(store.getKey("fiskai.demo.sync.ec.v1",null).encoded)
+    }
 }
