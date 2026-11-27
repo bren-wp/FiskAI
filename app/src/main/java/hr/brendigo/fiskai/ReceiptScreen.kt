@@ -155,11 +155,11 @@ internal fun ReceiptScreen(page:String,business:BusinessProfile,onBusy:(Boolean)
         syncToken="";syncDialog=false
         working(true)
         scope.launch{try{
-            withContext(Dispatchers.IO){runCatching{DemoSyncClient.push(url,subject,token,store.demoSyncEvents(business))}}
-                .onSuccess{message="Potvrđen prijenos DEMO zapisa: "+it}
+            withContext(Dispatchers.IO){runCatching{DemoSyncJournal(context).synchronize(url,subject,business.oib,token,store.demoSyncEvents(business))}}
+                .onSuccess{message="Potvrđeni lokalni zapisi: "+it.matched+" · Samo na serveru: "+it.remoteOnly}
                 .onFailure{message="Prijenos nije u cijelosti potvrđen. Lokalni zapisi ostaju sačuvani. Provjerite adresu, pristup ili sukob zapisa pa pokušajte ponovno."}
         }finally{working(false)}}
-    }){Text("Pošalji testne zapise")}},dismissButton={TextButton(enabled=!busy,onClick={syncDialog=false;syncToken=""}){Text("Odustani")}})
+    }){Text("Usporedi i sinkroniziraj")}},dismissButton={TextButton(enabled=!busy,onClick={syncDialog=false;syncToken=""}){Text("Odustani")}})
     if(manual)AlertDialog(onDismissRequest={if(!busy)manual=false},title={Text("Gotovinski primitak")},text={
         Column(verticalArrangement=Arrangement.spacedBy(4.dp)){
             Text("Unesite stvarno primljeni iznos i jedinstvenu oznaku dokaza. Ovaj zapis nije fiskalni račun i ne može se mijenjati.")
