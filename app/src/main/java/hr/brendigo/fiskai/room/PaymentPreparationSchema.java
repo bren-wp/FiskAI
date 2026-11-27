@@ -10,4 +10,11 @@ public final class PaymentPreparationSchema {
         exec.accept("CREATE TRIGGER IF NOT EXISTS demo_payment_preparation_no_delete BEFORE DELETE ON demo_payment_preparation BEGIN SELECT RAISE(ABORT,'Immutable payment preparation'); END");
         exec.accept("CREATE TRIGGER IF NOT EXISTS demo_payment_preparation_no_replace BEFORE INSERT ON demo_payment_preparation WHEN EXISTS(SELECT 1 FROM demo_payment_preparation WHERE receiptId=NEW.receiptId OR documentId=NEW.documentId OR eventId=NEW.eventId) BEGIN SELECT RAISE(ABORT,'Duplicate payment preparation'); END");
     }
+    /** v9 -> v10: multiple distinct receipts per document; preserve all rows. */
+    public static void allowMultiple(Consumer<String> exec) {
+        exec.accept("DROP INDEX IF EXISTS index_demo_payment_preparation_documentId");
+        exec.accept("CREATE INDEX IF NOT EXISTS index_demo_payment_preparation_documentId ON demo_payment_preparation(documentId)");
+        exec.accept("DROP TRIGGER IF EXISTS demo_payment_preparation_no_replace");
+        exec.accept("CREATE TRIGGER demo_payment_preparation_no_replace BEFORE INSERT ON demo_payment_preparation WHEN EXISTS(SELECT 1 FROM demo_payment_preparation WHERE receiptId=NEW.receiptId OR eventId=NEW.eventId) BEGIN SELECT RAISE(ABORT,'Duplicate payment preparation'); END");
+    }
 }
