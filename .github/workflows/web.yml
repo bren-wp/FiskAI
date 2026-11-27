@@ -50,6 +50,7 @@ jobs:
       - run: php server/tests/DemoDeviceProofTest.php
       - run: php server/tests/ServerRecoveryTest.php
       - run: php server/tests/EducExternalCheckpointTest.php
+      - run: php server/tests/DemoDocumentExchangeTest.php
       - run: python3 scripts/test-demo-sync-https.py
       - run: php server/tests/FiscalContractTest.php
       - run: php server/tests/FiscalSignatureTest.php
