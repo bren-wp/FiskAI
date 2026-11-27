@@ -1,6 +1,7 @@
 # Promjene
 
 ## 0.1.1 — kandidat (nije objavljeno)
+- Offline JIR verifier: službeni XSD, neovisni certifikat i SHA-256 pin, XMLDSig, korelacija ID-a poruke i negativni testovi. Bez stvarnog slanja.
 - Room v7: individualni šifrirani ulazni računi, nedestruktivan cutover stare kolekcije, CAS promjena statusa, objedinjeni backup/restore i migracijski testovi.
 - SHA-256 pinovi stvarno preuzetih službenih EDUC/PROD WSDL v1.10 arhiva i XSD-a; offline validacija potpisanog primjera prema stvarnom EDUC XSD-u u posebnom CI workflowu.
 - Ulazni eRačuni: lokalni uvoz ograničenog podskupa UBL XML u EUR, provjera OIB primatelja, deduplikacija, šifrirani original, lokalna obrada, statusni pokazatelji i filtriranje prema referenci 07; uključeno u backup. Bez potvrde CIUS ili mrežne razmjene.
