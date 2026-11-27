@@ -1,0 +1,51 @@
+name: Web
+on:
+  workflow_call:
+  pull_request:
+    paths: ['web/**','server/**','.github/workflows/web.yml']
+  push:
+    branches: [main, feature/native-alpha]
+    paths: ['web/**','server/**','.github/workflows/web.yml']
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - database: 'mysql:8.4'
+            healthcheck: 'mysqladmin ping -h 127.0.0.1'
+          - database: 'mariadb:11.4'
+            healthcheck: 'healthcheck.sh --connect --innodb_initialized'
+    services:
+      mysql:
+        image: ${{ matrix.database }}
+        env:
+          MYSQL_ROOT_PASSWORD: ci-only-password
+          MYSQL_DATABASE: fiskai_test
+          MARIADB_ROOT_PASSWORD: ci-only-password
+          MARIADB_DATABASE: fiskai_test
+        ports: ['3306:3306']
+        options: --health-cmd="${{ matrix.healthcheck }}" --health-interval=10s --health-timeout=5s --health-retries=12
+    env:
+      FISKAI_DB_DSN: mysql:host=127.0.0.1;port=3306;dbname=fiskai_test;charset=utf8mb4
+      FISKAI_DB_USER: root
+      FISKAI_DB_PASSWORD: ci-only-password
+    steps:
+      - uses: actions/checkout@v6
+      - run: php -v && php -m
+      - run: find web server -name '*.php' -print0 | xargs -0 -n1 php -l
+      - run: php server/tests/PriceListsTest.php
+      - run: php server/tests/DatabaseTest.php
+      - run: php server/tests/FiscalSignatureTest.php
+      - run: sudo apt-get update && sudo apt-get install -y xmlsec1
+      - run: |
+          dir="$(mktemp -d)"
+          trap 'rm -rf "$dir"' EXIT
+          php server/tests/FiscalSignatureTest.php "$dir"
+          xmlsec1 --verify --trusted-pem "$dir/cert.pem" --pubkey-cert-pem "$dir/cert.pem" --id-attr:Id RacunZahtjev "$dir/signed.xml"
+          if xmlsec1 --verify --trusted-pem "$dir/cert.pem" --pubkey-cert-pem "$dir/cert.pem" --id-attr:Id RacunZahtjev "$dir/tampered.xml"; then
+            echo "Modified XML unexpectedly verified"; exit 1
+          fi
