@@ -65,7 +65,7 @@ final class DemoDeviceProof {
         if($proof===null||!is_string($proof['nonce']??null)||!is_string($proof['signature']??null)||!is_string($proof['body']??null)
             ||!preg_match('/\A[0-9a-f]{64}\z/D',$proof['nonce'])||$row['nonce']!==$proof['nonce']
             ||$row['token_sha256']!==$tokenHash||(int)$row['fresh']!==1
-            ||strlen($proof['body'])>65536||json_decode($proof['body'],true,16,JSON_THROW_ON_ERROR)!==$request)
+            ||strlen($proof['body'])>($action==='demo-documents-push'?1600000:65536)||json_decode($proof['body'],true,16,JSON_THROW_ON_ERROR)!==$request)
             throw new DemoSyncAuthException('Invalid challenge.');
         $signature=base64_decode($proof['signature'],true);
         if($signature===false||strlen($signature)<8||strlen($signature)>80||base64_encode($signature)!==$proof['signature'])
