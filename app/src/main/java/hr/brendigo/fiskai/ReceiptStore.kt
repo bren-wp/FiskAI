@@ -79,6 +79,10 @@ internal class ReceiptStore(private val context:Context,private val db:RecordDat
         })
         return true
     }
+    fun prepareDemoPayment(receiptId:String,documentId:String):String=SecureRecords.withRecordLock {
+        ready()
+        PaymentPreparationStore.prepare(context,db,receiptId,documentId)
+    }
     fun cash(business:BusinessProfile,reference:String,date:String,amount:String,note:String):Boolean=SecureRecords.withRecordLock {
         post(ReceiptRules.cash(business.oib,reference,date,ReceiptRules.cents(amount),note),read())
     }
