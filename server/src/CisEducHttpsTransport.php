@@ -10,7 +10,7 @@ final class CisEducHttpsTransport {
     private const LIMIT=1048576;
     public static function authorize(string $subject,OpenSSLCertificate $signer,OpenSSLCertificate $response,
         string $signerPin,string $responsePin):array {
-        if(PHP_SAPI!=='cli'||getenv('FISKAI_CIS_RECOVERY_MODE')==='1'||getenv('FISKAI_CIS_EDUC_ENABLED')!=='1'||
+        if(PHP_SAPI!=='cli'||getenv('FISKAI_CIS_RECOVERY_MODE')==='1'||getenv('FISKAI_SERVER_RECOVERY_MODE')==='1'||getenv('FISKAI_CIS_EDUC_ENABLED')!=='1'||
             getenv('FISKAI_CIS_EDUC_AUTHORIZED_SUBJECT')!==$subject)
             throw new LogicException('EDUC transport is not authorized by local configuration.');
         $actor=getenv('FISKAI_CIS_OPERATOR_ID');
