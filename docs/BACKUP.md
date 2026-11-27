@@ -12,3 +12,7 @@ Nakon fiskalnog cutovera izvoz uključuje kanonsku Room povijest, izvedene broja
 ## Sadržaj v4 — DEMO naplate
 
 Ako postoje DEMO pripreme naplate, sadržaj v4 uključuje `paymentPreparations` uz v3 Room outbox. V1–v3 ostaju podržani. Restore v4 dopušten je samo u DEMO varijanti, nakon obnove dokumenata i naplata unutar iste SQL transakcije. Provjeravaju se jedinstveni identiteti, vlasnik, iznos, datum, sažeci i verzija pravila; neispravna veza uzrokuje rollback. Nema prenesenih ključeva ni autoriziranih odgovora. Kopija se ne smije koristiti na više uređaja za slanje. Buduće revizije pravila trebaju arhivu starih pravila kako bi se očuvala provjerljivost starih v4 kopija.
+
+## Sadržaj v5
+
+Djelomične i višestruke DEMO naplate izvoze se kao v5. Restore v5 provjerava zbrojeve po dokumentu, duplikate i pojedinačne sažetke prije upisa; v4 ostaje čitljiv uz stara pravila pune naplate i jedinstvenog dokumenta. V1–v3 ostaju podržani. Izvoz i uvoz i dalje ne predstavljaju sinkronizaciju ili autorizirano fiskalno slanje.
