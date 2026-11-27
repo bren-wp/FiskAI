@@ -48,10 +48,8 @@ def main():
         # Test-only trusted TLS termination marker. It is not part of the deployed app.
         router = d / "router.php"
         router.write_text("<?php\nif (hash_equals(" + json.dumps(secret) +
-            ", (string)(\$_SERVER['HTTP_X_TEST_TLS']??''))) \$_SERVER['HTTPS']='on';\n"
+            ", (string)($_SERVER['HTTP_X_TEST_TLS']??''))) $_SERVER['HTTPS']='on';\n"
             "require " + json.dumps(str(ROOT / "web/public/api.php")) + ";\n")
-        # Python does not interpolate PHP variables; remove the literal escape if present.
-        router.write_text(router.read_text().replace("\\$", "$"))
         with socket.socket() as sock:
             sock.bind(("127.0.0.1", 0))
             port = sock.getsockname()[1]
