@@ -41,3 +41,35 @@ rejected(fn()=>$verify(str_replace('<s:Body>','<s:Body Id="response1">',$soap)))
 rejected(fn()=>FiscalResponse::verifyJir($soap,$message,$other,openssl_x509_fingerprint($other,'sha256'),$dir,$manifest));
 rejected(fn()=>FiscalResponse::verifyJir($soap,$message,$cert,str_repeat('0',64),$dir,$manifest));
 echo "Offline signed JIR fixture verified; tamper, wrapping, correlation and untrusted key cases rejected.\n";
+
+if(getenv('FISKAI_DB_DSN')!==false){
+    require_once __DIR__.'/../src/SchemaMigrator.php';
+    require_once __DIR__.'/../src/CisEducResponseEvidence.php';
+    $db=db();
+    SchemaMigrator::apply($db,__DIR__.'/../database');
+    $ledger=new CisEducResponseEvidence($db);
+    $subject='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    $document='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+    $otherSubject='cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+    $storageKey=random_bytes(32);
+    $documentHash=hash('sha256','synthetic immutable EDUC document');
+    $requestHash=hash('sha256','synthetic request fixture');
+    $ledger->register($subject,$message,$document,$documentHash,$requestHash,$pin,'ci-test-key');
+    $ledger->register($subject,$message,$document,$documentHash,$requestHash,$pin,'ci-test-key');
+    rejected(fn()=>$ledger->register($otherSubject,$message,$document,$documentHash,$requestHash,$pin,'ci-test-key'));
+    try{$ledger->register($subject,$message,$document,$documentHash,hash('sha256','changed'),$pin,'ci-test-key');throw new RuntimeException('Request conflict accepted');}catch(DomainException){}
+    rejected(fn()=>$ledger->verifyAndStore($subject,$message,$xml,$cert,$dir,$storageKey));
+    rejected(fn()=>$ledger->verifyAndStore($subject,$message,$soap,$other,$dir,$storageKey));
+    try{$ledger->open($subject,$message,$storageKey);throw new RuntimeException('Unverified response persisted');}catch(LogicException){}
+    if($ledger->verifyAndStore($subject,$message,$soap,$cert,$dir,$storageKey)!==$jir)throw new RuntimeException('Valid fixture was not stored.');
+    if($ledger->verifyAndStore($subject,$message,$soap,$cert,$dir,$storageKey)!==$jir)throw new RuntimeException('Replay failed.');
+    if($ledger->open($subject,$message,$storageKey)!==$soap)throw new RuntimeException('Signed evidence changed.');
+    rejected(fn()=>$ledger->open($otherSubject,$message,$storageKey));
+    try{$ledger->open($subject,$message,random_bytes(32));throw new LogicException('Wrong key accepted');}catch(RuntimeException){}
+    $row=$db->query('SELECT sealed_response FROM cis_educ_response_evidence')->fetchColumn();
+    if(str_contains($row,'RacunOdgovor'))throw new RuntimeException('Plaintext evidence persisted.');
+    // Simulate unauthorized modification by a privileged test DB user.
+    $db->exec("UPDATE cis_educ_response_evidence SET request_sha256='".str_repeat('0',64)."'");
+    try{$ledger->open($subject,$message,$storageKey);throw new LogicException('Changed metadata accepted');}catch(RuntimeException){}
+    echo "EDUC evidence persistence, exact replay, isolation and authenticated recovery passed.\n";
+}

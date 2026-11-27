@@ -20,7 +20,7 @@ Ne uklanjajte postojeću aplikaciju radi zaobilaženja nepodudarnog potpisa.
    pokušavajte destruktivnu migraciju. Sačuvajte postojeću instalaciju i kopiju
    te provjerite mogućnost oporavka na izoliranom testnom uređaju.
 
-Room v8 nije potpuna normalizacija svih poslovnih domena. Aktualnu shemu
+Room v10 nije potpuna normalizacija svih poslovnih domena. Aktualnu shemu
 i preostale migracijske uvjete potražite u docs/ROOM.md i docs/BACKUP.md.
 
 ## Web i server

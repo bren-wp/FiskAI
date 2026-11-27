@@ -25,6 +25,9 @@ internal fun ReceiptScreen(page:String,business:BusinessProfile,onBusy:(Boolean)
     var data by remember{mutableStateOf(ReceiptWorkspace(emptyList(),emptyList()))}
     var busy by remember{mutableStateOf(true)}
     var message by remember{mutableStateOf("")}
+    var paymentReceipt by remember{mutableStateOf<ReceiptEvidence?>(null)}
+    var paymentSelection by remember{mutableStateOf(PaymentPreparationStore.Selection(emptyList(),false))}
+    var choiceIndex by remember{mutableStateOf(0)}
     var selected by remember{mutableStateOf<BankEvidence?>(null)}
     var note by remember{mutableStateOf("")}
     var manual by remember{mutableStateOf(false)}
@@ -40,6 +43,14 @@ internal fun ReceiptScreen(page:String,business:BusinessProfile,onBusy:(Boolean)
             withContext(Dispatchers.IO){runCatching{action() to store.read()}}
                 .onSuccess{message=it.first;data=it.second;selected=null;manual=false;note=""}
                 .onFailure{message="Spremanje nije potvrđeno. Provjerite podatke, format i postojeće zapise."}
+        }finally{working(false)}}
+    }
+    fun choosePayment(row:ReceiptEvidence){
+        working(true)
+        scope.launch{try{
+            withContext(Dispatchers.IO){runCatching{store.demoPaymentSelection(row.id)}}
+                .onSuccess{paymentSelection=it;choiceIndex=0;paymentReceipt=row}
+                .onFailure{message="Odgovarajući DEMO računi nisu dostupni."}
         }finally{working(false)}}
     }
     val picker=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()){uri->
@@ -87,6 +98,7 @@ internal fun ReceiptScreen(page:String,business:BusinessProfile,onBusy:(Boolean)
             Text((i+1).toString()+". "+row.date+" · "+row.reference,fontWeight=FontWeight.Bold)
             Text(row.note);Text(if(row.method=="CASH")"Gotovina" else "Transakcijski račun")
             Text(euro(ReceiptRules.amount(row.cents)))
+            if(BuildConfig.DEMO_MODE&&page=="Evidencija naplate")OutlinedButton(enabled=!busy&&ready,onClick={choosePayment(row)}){Text("Poveži s DEMO računom")}
         }}
         if(shown.isEmpty())Text("Nema potvrđenih primitaka za odabranu godinu.")
     }
@@ -99,6 +111,32 @@ internal fun ReceiptScreen(page:String,business:BusinessProfile,onBusy:(Boolean)
             OutlinedTextField(note,{note=it.take(512)},label={Text("Dokaz / namjena")})
         }
     },confirmButton={TextButton(enabled=!busy&&note.isNotBlank(),onClick={val evidence=note;perform{if(store.confirmBank(business,row.id,evidence))"Primitak je evidentiran." else "Primitak je već evidentiran."}}){Text("Potvrdi")}},dismissButton={TextButton(enabled=!busy,onClick={selected=null}){Text("Odustani")}})}
+    paymentReceipt?.let{row->
+        val choices=paymentSelection.choices
+        val choice=choices.getOrNull(choiceIndex)
+        AlertDialog(onDismissRequest={if(!busy)paymentReceipt=null},title={Text("Povezivanje naplate")},text={
+            Column(verticalArrangement=Arrangement.spacedBy(8.dp)){
+                Text(row.reference+" · "+euro(ReceiptRules.amount(row.cents)))
+                if(paymentSelection.linked)Text("Naplata je već povezana s DEMO računom.")
+                else Text("Odaberite odgovarajući DEMO račun. Veza je nepromjenjiva i ne šalje podatke Poreznoj upravi.")
+                if(choice!=null){
+                    Text("Račun "+choice.label,fontWeight=FontWeight.Bold)
+                    Text(choice.customer);Text(choice.date)
+                    Text("Preostalo za naplatu: "+euro(ReceiptRules.amount(choice.remainingCents)))
+                    if(choices.size>1)Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){
+                        TextButton(enabled=!busy&&choiceIndex>0,onClick={choiceIndex--}){Text("Prethodni")}
+                        TextButton(enabled=!busy&&choiceIndex<choices.lastIndex,onClick={choiceIndex++}){Text("Sljedeći")}
+                    }
+                    if(choices.size>1)Text((choiceIndex+1).toString()+" / "+choices.size)
+                }else Text("Nema odgovarajućeg nepovezanog računa među posljednjih 100 DEMO računa.")
+            }
+        },confirmButton={
+            if(choice!=null&&!paymentSelection.linked)TextButton(enabled=!busy,onClick={
+                paymentReceipt=null
+                perform{store.prepareDemoPayment(row.id,choice.id);"Naplata je povezana s DEMO računom."}
+            }){Text("Poveži")}
+        },dismissButton={TextButton(enabled=!busy,onClick={paymentReceipt=null}){Text("Zatvori")}})
+    }
     if(manual)AlertDialog(onDismissRequest={if(!busy)manual=false},title={Text("Gotovinski primitak")},text={
         Column(verticalArrangement=Arrangement.spacedBy(4.dp)){
             Text("Unesite stvarno primljeni iznos i jedinstvenu oznaku dokaza. Ovaj zapis nije fiskalni račun i ne može se mijenjati.")

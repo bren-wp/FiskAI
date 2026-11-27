@@ -9,6 +9,7 @@ plugins {
 }
 android {
     namespace = "hr.brendigo.fiskai"
+    testBuildType = providers.gradleProperty("fiskaiInstrumentedBuildType").orElse("debug").get()
     compileSdk { version = release(37) { minorApiLevel = 1 } }
     defaultConfig {
         applicationId = "hr.brendigo.fiskai"

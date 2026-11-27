@@ -50,7 +50,7 @@ jobs:
           fi
           gradle --no-configuration-cache -I scripts/runtime-sbom.init.gradle :app:fiskaiRuntimeSbom
           python3 scripts/check-room-schema.py app/build/room-schemas
-          cp app/build/room-schemas/compileReleaseJavaWithJavac/hr.brendigo.fiskai.room.FiscalRoomDatabase/8.json dist/FiskAI-room-schema.json
+          cp app/build/room-schemas/compileReleaseJavaWithJavac/hr.brendigo.fiskai.room.FiscalRoomDatabase/10.json dist/FiskAI-room-schema.json
           python3 scripts/package-source.py dist
           cp docs/THIRD_PARTY.md dist/THIRD_PARTY.md
           cp server/README.md dist/INSTALLATION.md
