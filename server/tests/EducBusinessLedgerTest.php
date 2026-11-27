@@ -57,3 +57,41 @@ ledgerReject(DomainException::class,fn()=>EducBusinessLedger::assertBound($entry
 $s=$db->prepare('SELECT document_sha256 FROM cis_educ_response_evidence WHERE message_id=?');$s->execute([$message]);
 ledgerCheck($s->fetchColumn()===$entry['digest']);
 echo "EDUC immutable business ledger, document chain and exact signed request binding passed.\n";
+
+if(getenv('FISKAI_CI_RECOVERY_TEST')==='1'){
+    require_once __DIR__.'/../src/CisEducRecovery.php';
+    $archiveKey=random_bytes(32);
+    $archive=(new CisEducRecovery($db))->export($subject,'ledger-fixture',$archiveKey,$storageKey);
+    $dsn=getenv('FISKAI_DB_DSN');
+    $name='fiskai_recovery_test_'.bin2hex(random_bytes(6));
+    $targetDsn=str_replace('dbname=fiskai_test;','dbname='.$name.';',$dsn);
+    if($targetDsn===$dsn)throw new RuntimeException('Expected CI database only.');
+    $db->exec('CREATE DATABASE `'.$name.'` CHARACTER SET utf8mb4');
+    $target=null;
+    try{
+        $target=new PDO($targetDsn,getenv('FISKAI_DB_USER'),getenv('FISKAI_DB_PASSWORD'),[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION,PDO::ATTR_EMULATE_PREPARES=>false]);
+        SchemaMigrator::apply($target,__DIR__.'/../database');
+        $restore=new CisEducRecovery($target);
+        putenv('FISKAI_CIS_EDUC_ENABLED=0');putenv('FISKAI_CIS_RECOVERY_MODE=1');
+        ledgerCheck($restore->restore($subject,'ledger-fixture',$archive,$archiveKey,$storageKey)===1);
+        $restored=new EducBusinessLedger($target);
+        ledgerCheck($restored->read($subject,$doc,$storageKey)===$entry);
+        ledgerCheck($restored->read($subject,$second['documentId'],$storageKey)===$next);
+        $recovered=new CisEducDispatch($target);
+        ledgerCheck($recovered->state($subject,$message)==='UNCERTAIN');
+        ledgerCheck($recovered->open($subject,$message,$storageKey)===$soap);
+        ledgerReject(DomainException::class,fn()=>$recovered->reserve($subject,$message,$storageKey));
+        $secondMessage=$recovered->prepareFromLedger($subject,$second['documentId'],$key,$credential,$pin,$pin,$dir,$storageKey);
+        putenv('FISKAI_CIS_RECOVERY_MODE=0');
+        // Subject quarantine must block even a new dispatch for a document that had no archived request.
+        ledgerReject(LogicException::class,fn()=>$recovered->dispatchAuthorized($subject,$secondMessage,$credential,$credential,$dir,$storageKey));
+        $s=$target->prepare('SELECT COUNT(*) FROM educ_recovery_quarantine WHERE subject_id=?');$s->execute([$subject]);
+        ledgerCheck((int)$s->fetchColumn()===1);
+        ledgerReject(DomainException::class,fn()=>$restore->restore($subject,'ledger-fixture',$archive,$archiveKey,$storageKey));
+        echo "EDUC archive v2: document chain, exact request, quarantine and non-overwriting restore passed.\n";
+    }finally{
+        $target=null;
+        $db->exec('DROP DATABASE `'.$name.'`');
+        putenv('FISKAI_CIS_RECOVERY_MODE=0');
+    }
+}
