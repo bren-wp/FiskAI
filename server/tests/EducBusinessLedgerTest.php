@@ -74,8 +74,34 @@ ledgerReject(DomainException::class,fn()=>EducBusinessLedger::assertBound($next[
 ledgerReject(DomainException::class,fn()=>EducBusinessLedger::assertBound($entry['document'],str_replace('12.50','12.51',$soap),$credential));
 $s=$db->prepare('SELECT document_sha256 FROM cis_educ_response_evidence WHERE message_id=?');$s->execute([$message]);
 ledgerCheck($s->fetchColumn()===$entry['digest']);
+$multi=['schemaVersion'=>2,'documentId'=>'a2000000-0000-4000-8000-000000000006','messageId'=>'a3000000-0000-4000-8000-000000000006',
+    'issuedAt'=>'27.11.2026 10:00:00','premise'=>'PP1','register'=>'1','operatorOib'=>'00000000001','payment'=>'G','kind'=>'INVOICE','correctionOf'=>null,
+    'lines'=>[
+        ['description'=>'Test 25','quantityMilli'=>2000,'unitCents'=>1000,'discountBps'=>1000,'rate'=>25],
+        ['description'=>'Test 13','quantityMilli'=>1000,'unitCents'=>500,'discountBps'=>0,'rate'=>13]
+    ]];
+$multiEntry=$ledger->issue($subject,$multi,$storageKey);
+ledgerCheck($multiEntry['document']['number']==='4'&&$multiEntry['document']['netCents']===2300&&$multiEntry['document']['taxCents']===515&&$multiEntry['document']['totalCents']===2815);
+ledgerCheck($ledger->read($subject,$multi['documentId'],$storageKey)===$multiEntry);
+ledgerCheck($ledger->issue($subject,$multi,$storageKey)===$multiEntry);
+$multiXml=EducBusinessLedger::request($multiEntry['document'],$key);
+ledgerCheck(substr_count($multiXml,'<f:Porez>')===2&&str_contains($multiXml,'<f:IznosUkupno>28.15</f:IznosUkupno>'));
+$multiPrepared=CisEducRequestPreparation::prepare($multiXml,'12345678903',$key,$credential,$pin,$dir);
+EducBusinessLedger::assertBound($multiEntry['document'],$multiPrepared['soap'],$credential);
+$credit=$multi;$credit['kind']='CREDIT';$credit['correctionOf']=$multi['documentId'];
+$credit['documentId']='a2000000-0000-4000-8000-000000000007';$credit['messageId']='a3000000-0000-4000-8000-000000000007';
+$credit['issuedAt']='27.11.2026 11:00:00';
+$badCredit=$credit;$badCredit['lines'][0]['unitCents']=999;
+ledgerReject(DomainException::class,fn()=>$ledger->issue($subject,$badCredit,$storageKey));
+$creditEntry=$ledger->issue($subject,$credit,$storageKey);
+ledgerCheck($creditEntry['document']['number']==='5'&&$creditEntry['document']['totalCents']===-2815);
+ledgerCheck($ledger->issue($subject,$credit,$storageKey)===$creditEntry);
+ledgerCheck($ledger->read($subject,$multi['documentId'],$storageKey)===$multiEntry);
+ledgerReject(LogicException::class,fn()=>EducBusinessLedger::request($creditEntry['document'],$key));
+$duplicate=$credit;$duplicate['documentId']='a2000000-0000-4000-8000-000000000008';$duplicate['messageId']='a3000000-0000-4000-8000-000000000008';
+ledgerReject(DomainException::class,fn()=>$ledger->issue($subject,$duplicate,$storageKey));
 $head=$ledger->checkpoint($subject,$storageKey);
-ledgerCheck($head['position']===5&&$head['subject']===$subject);
+ledgerCheck($head['position']===7&&$head['subject']===$subject);
 echo "EDUC immutable business ledger, document chain and exact signed request binding passed.\n";
 
 if(getenv('FISKAI_CI_RECOVERY_TEST')==='1'){
@@ -97,6 +123,8 @@ if(getenv('FISKAI_CI_RECOVERY_TEST')==='1'){
         $restored=new EducBusinessLedger($target);
         ledgerCheck($restored->read($subject,$doc,$storageKey)===$entry);
         ledgerCheck($restored->read($subject,$second['documentId'],$storageKey)===$next);
+        ledgerCheck($restored->read($subject,$multi['documentId'],$storageKey)===$multiEntry);
+        ledgerCheck($restored->read($subject,$credit['documentId'],$storageKey)===$creditEntry);
         ledgerReject(DomainException::class,fn()=>$restored->issue($subject,$third,$storageKey));
         $recovered=new CisEducDispatch($target);
         ledgerCheck($recovered->state($subject,$message)==='UNCERTAIN');
