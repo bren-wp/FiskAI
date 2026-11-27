@@ -43,4 +43,5 @@ openssl ca -batch -notext -config "$work/ca.cnf" -in "$work/leaf.csr" -out "$wor
 openssl ca -gencrl -config "$work/ca.cnf" -out "$work/valid.crl" 2>/dev/null
 openssl ca -config "$work/ca.cnf" -revoke "$work/leaf.pem" 2>/dev/null
 openssl ca -gencrl -config "$work/ca.cnf" -out "$work/revoked.crl" 2>/dev/null
-php server/tests/CertificateTrustTest.php "$work/leaf.pem" "$work/ca.pem" "$work/valid.crl" "$work/revoked.crl"
+openssl ca -gencrl -config "$work/ca.cnf" -crl_lastupdate 20200101000000Z -crl_nextupdate 20200102000000Z -out "$work/expired.crl" 2>/dev/null
+php server/tests/CertificateTrustTest.php "$work/leaf.pem" "$work/ca.pem" "$work/valid.crl" "$work/revoked.crl" "$work/expired.crl"
