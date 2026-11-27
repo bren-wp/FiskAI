@@ -93,8 +93,21 @@ internal object DemoSyncClient {
         return snapshot(subject,exchange(destination,token,JSONObject().put("protocol",1).put("subjectId",subject),SNAPSHOT_LIMIT))
     }
     private fun exchange(destination:URI,token:String,request:JSONObject,responseLimit:Int):JSONObject {
-        require(token.matches(Regex("[0-9a-f]{64}")))
+        val subject=identity(request.getString("subjectId"))
+        val action=destination.rawQuery.removePrefix("action=")
+        require(action in setOf("demo-sync","demo-sync-pull"))
+        val challenge=URI(destination.toASCIIString().substringBefore("?")+"?action=demo-sync-challenge")
+        val response=exchangeRaw(challenge,token,JSONObject().put("protocol",1).put("subjectId",subject).toString().toByteArray(Charsets.UTF_8),LIMIT)
+        require(response.keys().asSequence().toSet()==setOf("protocol","subjectId","deviceId","nonce"))
+        require(response.get("protocol")==1&&response.get("subjectId")==subject)
+        val device=identity(response.getString("deviceId"))
+        val nonce=response.getString("nonce")
         val payload=request.toString().toByteArray(Charsets.UTF_8)
+        val signature=DemoDeviceIdentity.sign(DemoDeviceIdentity.message(action,subject,device,nonce,token,payload))
+        return exchangeRaw(destination,token,payload,responseLimit,nonce,signature)
+    }
+    private fun exchangeRaw(destination:URI,token:String,payload:ByteArray,responseLimit:Int,nonce:String?=null,signature:String?=null):JSONObject {
+        require(token.matches(Regex("[0-9a-f]{64}")))
         require(payload.size<=LIMIT)
         val conn=destination.toURL().openConnection(Proxy.NO_PROXY) as HttpsURLConnection
         try {
@@ -102,6 +115,10 @@ internal object DemoSyncClient {
             conn.connectTimeout=10000;conn.readTimeout=15000
             conn.useCaches=false;conn.requestMethod="POST";conn.doOutput=true
             conn.setRequestProperty("Authorization","Bearer "+token)
+            if(nonce!=null&&signature!=null){
+                conn.setRequestProperty("X-FiskAI-Nonce",nonce)
+                conn.setRequestProperty("X-FiskAI-Signature",signature)
+            }
             conn.setRequestProperty("Content-Type","application/json")
             conn.setRequestProperty("Accept","application/json")
             conn.setFixedLengthStreamingMode(payload.size)
