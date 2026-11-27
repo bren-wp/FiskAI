@@ -14,6 +14,8 @@ MAX_ENTRY = 16 * 1024 * 1024
 SOURCES = {
     "validator-2026-03-13": "https://porezna.gov.hr/fiskalizacija/api/dokumenti/197",
     "ubl-2026-04-15": "https://porezna.gov.hr/fiskalizacija/api/dokumenti/198",
+    "efiskalizacija-2026-02-12": "https://porezna.gov.hr/fiskalizacija/api/dokumenti/175",
+    "eizvjestavanje-2026-02-12": "https://porezna.gov.hr/fiskalizacija/api/dokumenti/187",
 }
 
 def verify(path, kind, expected):
