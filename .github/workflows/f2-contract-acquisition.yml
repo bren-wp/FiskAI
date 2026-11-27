@@ -12,6 +12,7 @@ on:
       - 'scripts/prepare-f2-hr-schematron.py'
       - 'scripts/run-f2-schematron.py'
       - 'scripts/test-f2-dual-schematron.py'
+      - 'scripts/fixtures/f2-positive-invoice.xml'
   workflow_dispatch:
 permissions:
   contents: read
