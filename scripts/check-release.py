@@ -3,6 +3,7 @@
 import hashlib
 import pathlib
 import re
+import stat
 import sys
 import zipfile
 
@@ -10,15 +11,64 @@ REQUIRED = {
     "FiskAI.apk", "demo.apk", "FiskAI-unsigned.aab", "FiskAI-source.zip",
     "FiskAI-web.zip", "FiskAI-server.zip", "FiskAI-brending.zip",
     "FiskAI-database.zip", "FiskAI-screenshots.zip", "FiskAI-android.cdx.json", "FiskAI-room-schema.json",
-    "INSTALLATION.md", "CHANGELOG.md", "THIRD_PARTY.md",
+    "INSTALLATION.md", "UPGRADE.md", "CHANGELOG.md", "THIRD_PARTY.md",
 }
 
 def digest(path):
     with path.open("rb") as stream:
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
+def safe_archive(archive):
+    seen = set()
+    for entry in archive.infolist():
+        name = entry.filename.rstrip("/")
+        parts = name.split("/")
+        if (not name or name.startswith("/") or "\\" in name or ":" in name
+                or any(part in ("", ".", "..") for part in parts)
+                or name in seen or stat.S_ISLNK(entry.external_attr >> 16)):
+            raise ValueError("Unsafe or duplicate archive entry: " + entry.filename)
+        seen.add(name)
+    if not any(not i.is_dir() for i in archive.infolist()) or archive.testzip() is not None:
+        raise ValueError("Empty or damaged archive")
+
+
+def verify_branding(archive, package):
+    prefix = "FiskAI/brending/originals/" + package + "/"
+    files = {i.filename[len(prefix):] for i in archive.infolist()
+             if not i.is_dir() and i.filename.startswith(prefix)}
+    if not any(n.lower().endswith(".png") for n in files):
+        raise ValueError("Original PNG package missing: " + package)
+    expected_files = {}
+    original_zip = False
+    manifest = "FiskAI/brending/package-" + package + ".sha256"
+    for line in archive.read(manifest).decode("utf-8").splitlines():
+        if not line.strip():
+            continue
+        match = re.fullmatch(r"([0-9a-f]{64})  (.+)", line)
+        if not match:
+            raise ValueError("Invalid branding manifest: " + package)
+        expected, name = match.groups()
+        if name == "original ZIP":
+            if original_zip:
+                raise ValueError("Duplicate original ZIP checksum")
+            original_zip = True
+            continue
+        if name in expected_files or name not in files:
+            raise ValueError("Unexpected or duplicate branding file: " + name)
+        expected_files[name] = expected
+    if not original_zip or set(expected_files) != files:
+        raise ValueError("Incomplete branding manifest: " + package)
+    for name, expected in expected_files.items():
+        with archive.open(prefix + name) as stream:
+            if hashlib.file_digest(stream, "sha256").hexdigest() != expected:
+                raise ValueError("Original branding checksum mismatch: " + name)
+
+
 def validate(dist):
-    names = {path.name for path in dist.iterdir() if path.is_file()}
+    entries = list(dist.iterdir())
+    if any(path.is_symlink() or not path.is_file() for path in entries):
+        raise ValueError("Unexpected non-regular release artifact")
+    names = {path.name for path in entries}
     if not REQUIRED.issubset(names):
         raise ValueError("Missing release files: " + ", ".join(sorted(REQUIRED - names)))
     manifest = {}
@@ -36,23 +86,10 @@ def validate(dist):
     for name in sorted(REQUIRED):
         if name.endswith((".zip", ".apk", ".aab")):
             with zipfile.ZipFile(dist / name) as archive:
-                if not any(not i.is_dir() for i in archive.infolist()) or archive.testzip() is not None:
-                    raise ValueError("Empty or damaged archive: " + name)
+                safe_archive(archive)
     with zipfile.ZipFile(dist / "FiskAI-brending.zip") as archive:
-        files = set(archive.namelist())
         for package in ("01", "02"):
-            prefix = "FiskAI/brending/originals/" + package + "/"
-            if not any(n.startswith(prefix) and n.lower().endswith(".png") for n in files):
-                raise ValueError("Original PNG package missing: " + package)
-        for line in archive.read("FiskAI/brending/package-02.sha256").decode("utf-8").splitlines():
-            if not line.strip():
-                continue
-            expected, name = line.split("  ", 1)
-            if name == "original ZIP":
-                continue
-            with archive.open("FiskAI/brending/originals/02/" + name) as stream:
-                if hashlib.file_digest(stream, "sha256").hexdigest() != expected:
-                    raise ValueError("Original branding checksum mismatch: " + name)
+            verify_branding(archive, package)
     with zipfile.ZipFile(dist / "FiskAI-screenshots.zip") as archive:
         names = archive.namelist()
         for platform in ("android", "web", "admin"):
