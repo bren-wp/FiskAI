@@ -5,6 +5,7 @@ require_once __DIR__.'/CisEducResponseEvidence.php';
 require_once __DIR__.'/CisEducHttpsTransport.php';
 require_once __DIR__.'/EducBusinessLedger.php';
 require_once __DIR__.'/EducExternalCheckpoint.php';
+require_once __DIR__.'/EducRemoteCheckpoint.php';
 
 /** EDUC lifecycle. External transport disabled unless explicitly authorized; no PROD support.
  * Caller must provide trusted immutable domain document and independently approved pins.
@@ -99,7 +100,7 @@ final class CisEducDispatch {
                 foreach($ledger->verifySubject($subject,$storageKey) as $entry)
                     if(in_array($entry['document']['kind']??null,['CREDIT','PARTIAL_CREDIT'],true))
                         throw new LogicException('Credit reconciliation required before external dispatch.');
-                EducExternalCheckpoint::requireLatest($ledger->checkpoint($subject,$storageKey));
+                EducRemoteCheckpoint::requireFresh($ledger->checkpoint($subject,$storageKey));
             }
             $soap=self::decrypt($r,$storageKey);$token=bin2hex(random_bytes(32));
             $s=$this->db->prepare("UPDATE cis_educ_dispatch SET state='RESERVED',reservation_sha256=?,reserved_at=UTC_TIMESTAMP(6),updated_at=UTC_TIMESTAMP(6) WHERE message_id=? AND subject_id=? AND state='PREPARED'");
