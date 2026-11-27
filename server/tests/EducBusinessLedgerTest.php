@@ -100,8 +100,26 @@ ledgerCheck($ledger->read($subject,$multi['documentId'],$storageKey)===$multiEnt
 ledgerReject(LogicException::class,fn()=>EducBusinessLedger::request($creditEntry['document'],$key));
 $duplicate=$credit;$duplicate['documentId']='a2000000-0000-4000-8000-000000000008';$duplicate['messageId']='a3000000-0000-4000-8000-000000000008';
 ledgerReject(DomainException::class,fn()=>$ledger->issue($subject,$duplicate,$storageKey));
+$partialOriginal=$multi;
+$partialOriginal['documentId']='a2000000-0000-4000-8000-000000000009';$partialOriginal['messageId']='a3000000-0000-4000-8000-000000000009';
+$partialOriginal['issuedAt']='27.11.2026 12:00:00';
+$partialEntry=$ledger->issue($subject,$partialOriginal,$storageKey);
+$partial=$partialOriginal;$partial['kind']='PARTIAL_CREDIT';$partial['correctionOf']=$partialOriginal['documentId'];
+$partial['documentId']='a2000000-0000-4000-8000-000000000010';$partial['messageId']='a3000000-0000-4000-8000-000000000010';
+$partial['issuedAt']='27.11.2026 13:00:00';$partial['lines']=[$partialOriginal['lines'][0]];$partial['lines'][0]['quantityMilli']=1000;
+$p1=$ledger->issue($subject,$partial,$storageKey);
+ledgerCheck($p1['document']['totalCents']===-1125);
+ledgerCheck($ledger->issue($subject,$partial,$storageKey)===$p1);
+$rest=$partial;$rest['documentId']='a2000000-0000-4000-8000-000000000011';$rest['messageId']='a3000000-0000-4000-8000-000000000011';
+$rest['lines'][]=$partialOriginal['lines'][1];
+$p2=$ledger->issue($subject,$rest,$storageKey);
+ledgerCheck($p2['document']['totalCents']===-1690);
+ledgerCheck($ledger->read($subject,$partialOriginal['documentId'],$storageKey)===$partialEntry);
+$extra=$partial;$extra['documentId']='a2000000-0000-4000-8000-000000000012';$extra['messageId']='a3000000-0000-4000-8000-000000000012';
+ledgerReject(DomainException::class,fn()=>$ledger->issue($subject,$extra,$storageKey));
+ledgerReject(LogicException::class,fn()=>EducBusinessLedger::request($p1['document'],$key));
 $head=$ledger->checkpoint($subject,$storageKey);
-ledgerCheck($head['position']===7&&$head['subject']===$subject);
+ledgerCheck($head['position']===10&&$head['subject']===$subject);
 echo "EDUC immutable business ledger, document chain and exact signed request binding passed.\n";
 
 if(getenv('FISKAI_CI_RECOVERY_TEST')==='1'){
@@ -125,6 +143,8 @@ if(getenv('FISKAI_CI_RECOVERY_TEST')==='1'){
         ledgerCheck($restored->read($subject,$second['documentId'],$storageKey)===$next);
         ledgerCheck($restored->read($subject,$multi['documentId'],$storageKey)===$multiEntry);
         ledgerCheck($restored->read($subject,$credit['documentId'],$storageKey)===$creditEntry);
+        ledgerCheck($restored->read($subject,$partial['documentId'],$storageKey)===$p1);
+        ledgerCheck($restored->read($subject,$rest['documentId'],$storageKey)===$p2);
         ledgerReject(DomainException::class,fn()=>$restored->issue($subject,$third,$storageKey));
         $recovered=new CisEducDispatch($target);
         ledgerCheck($recovered->state($subject,$message)==='UNCERTAIN');
