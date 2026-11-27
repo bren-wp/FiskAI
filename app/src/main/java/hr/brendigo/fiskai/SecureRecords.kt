@@ -39,14 +39,25 @@ internal class SecureRecords(
                 val value=SecureRecords(context,item.namespace,database).getString(item.name,item.empty)
                 records.put(item.id,org.json.JSONTokener(value).nextValue())
             }
-            org.json.JSONObject().put("version",1).put("demo",BuildConfig.DEMO_MODE).put("records",records).toString()
+            val sql=database.writableDatabase
+            sql.beginTransaction()
+            try {
+                val journals=LedgerBackup(context,database).export(sql)
+                val result=org.json.JSONObject().put("version",2).put("demo",BuildConfig.DEMO_MODE).put("records",records).put("journals",journals).toString()
+                require(result.toByteArray(Charsets.UTF_8).size<=PortableBackup.MAX_PLAINTEXT)
+                sql.setTransactionSuccessful()
+                result
+            } finally { sql.endTransaction() }
         }
 
-        // Import a partial workspace, not a fiscal ledger. Never overwrite existing records.
+        // Legacy v1 workspace or v2 workspace with journals; never overwrite existing records.
         internal fun restoreWorkspace(context:Context,json:String,database:RecordDatabase=RecordDatabase.shared(context)) = synchronized(lock) {
             val root=org.json.JSONObject(json)
-            require(root.keys().asSequence().toSet()==setOf("version","demo","records"))
-            require(root.getInt("version")==1 && root.getBoolean("demo")==BuildConfig.DEMO_MODE)
+            val version=root.getInt("version")
+            require(version in 1..2 && root.getBoolean("demo")==BuildConfig.DEMO_MODE)
+            require(root.keys().asSequence().toSet()==if(version==1)setOf("version","demo","records") else setOf("version","demo","records","journals"))
+            val ledger=LedgerBackup(context,database)
+            val journals=if(version==2)root.getJSONObject("journals").also(ledger::validate) else null
             val payload=root.getJSONObject("records")
             require(payload.keys().asSequence().toSet()==backupRecords.map { it.id }.toSet())
             val incoming=backupRecords.map { item ->
@@ -61,6 +72,8 @@ internal class SecureRecords(
             WorkspaceValidation.validate(payload)
             // Migrate old preferences first, so an unmigrated existing record cannot be overwritten.
             for((item,target,_) in incoming) require(target.getString(item.name,item.empty)==item.empty)
+            val certificate=SecureRecords(context,"fiskai_test_certificate",database)
+            require(certificate.getString("credential","{}")=="{}")
             val sealed=incoming.map { (item,target,encoded) -> item to target.encrypt(item.name,encoded) }
             val sql=database.writableDatabase
             sql.beginTransaction()
@@ -73,6 +86,7 @@ internal class SecureRecords(
                     while(cursor.moveToNext()) require(backupRecords.any { it.namespace==cursor.getString(0)&&it.name==cursor.getString(1) })
                 }
                 for((item,encrypted) in sealed) database.write(item.namespace,item.name,encrypted)
+                if(journals!=null)ledger.restore(sql,journals)
                 sql.setTransactionSuccessful()
             } finally { sql.endTransaction() }
         }

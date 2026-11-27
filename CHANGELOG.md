@@ -1,6 +1,7 @@
 # Promjene
 
 ## 0.1.1 — kandidat (nije objavljeno)
+- Backup sadržaj v2: DEMO računi i sekvence, stanje i kretanje zaliha, CIS testni dnevnik, provjera kontinuiteta brojeva i salda, kompatibilnost uvoza v1.
 - Prijenosni šifrirani backup radnog prostora (nacrti, katalog, profil i postavke); vraćanje samo u prazan radni prostor, bez izvoza certifikata i dnevnika. AES-256-GCM i PBKDF2-HMAC-SHA256, Android 8+, unit testovi.
 - Kontrolirana ručna objava tehničkog testnog izdanja samo s glavne grane nakon prolaska CI-ja i provjere obveznih priloga, originalnog brendinga i snimki.
 - Serverski CLI za nedestruktivne, idempotentne SQL migracije s evidencijom SHA-256, zaključavanjem i integracijskim testovima.
