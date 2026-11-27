@@ -110,6 +110,27 @@ class PaymentPreparationInstrumentedTest {
                 assertEquals("DEMO",JSONObject(row.getString("snapshot")).getString("environment"))
             }
             assertEquals(setOf(doc,second),exportedIds)
+            val replicaSubject=UUID.randomUUID().toString()
+            val replicaUrl="https://example.test/api.php"
+            val replicaScope=FiscalCutover.digest("DEMO_DOCUMENT_REPLICA_V1\u0000"+DemoSyncClient.endpoint(replicaUrl).toASCIIString()+"\u0000"+replicaSubject+"\u0000"+business.oib)
+            val replicaFile=java.io.File(ctx.noBackupFilesDir,"demo-document-replica/"+replicaScope+".checkpoint")
+            try{
+                val snapshot=JSONObject().put("protocol",1).put("subjectId",replicaSubject).put("ownerOib",business.oib)
+                    .put("status","DEMO_DOCUMENT_SNAPSHOT").put("documents",docs)
+                val remote=DemoDocumentJournal.snapshot(snapshot,replicaSubject,business.oib)
+                val journal=DemoDocumentJournal(ctx,source)
+                val result=journal.reconcileAndSave(replicaUrl,replicaSubject,business.oib,listOf(remote.first()),snapshot)
+                assertEquals(1,result.matched)
+                assertEquals(listOf(remote.last()),result.remoteOnly)
+                assertFalse(replicaFile.readText().contains(doc))
+                assertEquals(result,DemoDocumentJournal(ctx,source).reconcileAndSave(replicaUrl,replicaSubject,business.oib,listOf(remote.first()),snapshot))
+                val shorter=JSONObject(snapshot.toString()).put("documents",org.json.JSONArray().put(docs.getJSONObject(0)))
+                assertTrue(runCatching{journal.reconcileAndSave(replicaUrl,replicaSubject,business.oib,emptyList(),shorter)}.isFailure)
+                val changed=remote.first().copy(digest="0".repeat(64))
+                assertTrue(runCatching{DemoDocumentJournal.compare(listOf(changed),remote,emptyList())}.isFailure)
+                assertTrue(runCatching{DemoDocumentJournal.snapshot(snapshot,replicaSubject,"00000000001")}.isFailure)
+                assertEquals(setOf(doc,second),room.queue().history().map{it.id}.toSet())
+            }finally{android.util.AtomicFile(replicaFile).delete()}
             assertTrue(runCatching{DemoDocumentExchange.export(ctx,source,"00000000001",subject)}.isFailure)
             val request=DemoSyncClient.request(subject,syncEvents)
             assertEquals(subject,request.getString("subjectId"))
