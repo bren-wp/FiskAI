@@ -1,3 +1,7 @@
-# Alpha09 acceptance status
+# Alpha10 acceptance status
 
-Added real test-only CIS Echo transport, durable diagnostic journal, atomic claim, conservative interrupted-request recovery, schema 1 to 2 migration, Croatian screen and parser/state tests. No live endpoint result verified. No actual invoice submission or fiscal receipt issuance. SOAPAction contract and device TLS/parser compatibility require verification. Prior alpha08 CI checked independently; new build and instrumentation pending. Normalized Room, transaction-safe invoice numbering, test certificate trust, XMLDSig, ZKI/JIR, eInvoice integrations, backup, web and visual acceptance remain outstanding.
+Added local, explicitly non-fiscal DEMO receipt ledger with atomic sequence/snapshot commit, unique draft identity, immutable update/delete triggers, encrypted payload, schema v3 migration, and Croatian Compose screen. Scope is per-device per-year per-premise/register, not a production numbering design. Added standalone ZKI RSA-SHA256/MD5 implementation with unit tests and a ledger device test. No production issuance or real fiscal response handling.
+
+Alpha08 CI run 16 succeeded. Alpha09 run 18 was in progress at last check. Alpha10 CI and instrumented tests not yet verified.
+
+Official v2.7 specification and EDUC v1.10 archive identified; official ZIP retrieval was unsupported by web reader. No fabricated WSDL/XSD. See ACCEPTANCE.md for full remaining gates including F2, Room, backup, backend/web, visual and security audits, and release.
