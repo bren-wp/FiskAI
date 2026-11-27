@@ -158,7 +158,7 @@ internal fun ProductScreen(products: List<Product>, onSave: (List<Product>) -> B
             HorizontalDivider(color=Color(0xFFE2E8F0))
         }
     }
-    Button(onClick={editing=Product(name="",code="",price=BigDecimal.ZERO,vat=BigDecimal("25"),service=filter==CatalogKind.SERVICES,category=category?.takeUnless{it=="Bez kategorije"}.orEmpty());error=""},modifier=Modifier.fillMaxWidth()){Text("+  Dodaj proizvod ili uslugu")}
+    Button(onClick={editing=Product(name="",code="",price=BigDecimal.ZERO,vat=BigDecimal("25"),service=filter==CatalogKind.SERVICES,category=category?.takeUnless{it=="Bez kategorije"}.orEmpty());error=""},modifier=Modifier.fillMaxWidth()){Text("+ Dodaj proizvod ili uslugu")}
     detail?.let{product->
         AlertDialog(onDismissRequest={detail=null},title={Text(product.name)},text={
             Column {

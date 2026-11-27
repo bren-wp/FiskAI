@@ -22,6 +22,8 @@ jobs:
         with:
           packages: "platform-tools platforms;android-37.1 build-tools;36.0.0"
       - run: gradle --stacktrace :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:bundleDebug :app:assembleDemo :app:bundleRelease
+      - name: Test screenshot selectors
+        run: python3 scripts/test-capture-android.py
       - name: Verify generated Room schemas
         run: python3 scripts/check-room-schema.py app/build/room-schemas
       - uses: actions/upload-artifact@v6
