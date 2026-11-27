@@ -11,7 +11,7 @@ import java.util.Locale
 import java.util.TimeZone
 import java.util.UUID
 
-/** Explicit full settlement of one local DEMO receipt with one confirmed DEMO payment.
+/** Explicit allocations of confirmed DEMO payments to immutable local documents.
  * Not an eInvoice, an eReporting submission or a production payment allocation.
  * The same physical SQLite transaction is used for references and encrypted evidence.
  */
@@ -24,11 +24,12 @@ internal object PaymentPreparationStore {
         return ReceiptStore.validate(bank,events).receipts.associateBy{it.id}
     }
     private fun uuid(value:String) { require(UUID.fromString(value).toString()==value) }
-    private fun snapshot(context:Context,db:RecordDatabase,sql:SQLiteDatabase,receipt:ReceiptEvidence,document:String,event:String):JSONObject {
+    private data class Checked(val json:JSONObject,val total:Long)
+    private fun snapshot(context:Context,db:RecordDatabase,sql:SQLiteDatabase,receipt:ReceiptEvidence,document:String,event:String):Checked {
         uuid(document);uuid(event)
         require(receipt.id.matches(Regex("[0-9a-f]{64}")))
         val secure=SecureRecords(context,"fiskai_demo_receipts",db)
-        val digest=sql.rawQuery("SELECT payload,digest,created,draftId,year,number,premise,registerNo FROM fiscal_document WHERE id=?",arrayOf(document)).use{c->
+        val (digest,total)=sql.rawQuery("SELECT payload,digest,created,draftId,year,number,premise,registerNo FROM fiscal_document WHERE id=?",arrayOf(document)).use{c->
             require(c.moveToFirst())
             val plain=secure.openSnapshot(document,c.getString(0))
             require(FiscalCutover.digest(plain)==c.getString(1))
@@ -37,20 +38,21 @@ internal object PaymentPreparationStore {
                 p.getString("draft")==c.getString(3) && p.getLong("created")==c.getLong(2) &&
                 p.getInt("year")==c.getInt(4) && p.getLong("number")==c.getLong(5) &&
                 p.getString("premise")==c.getString(6) && p.getString("register")==c.getString(7))
-            require(ReceiptRules.cents(p.getString("total"))==receipt.cents && receipt.cents>0)
+            val total=ReceiptRules.cents(p.getString("total"))
+            require(total>0 && receipt.cents in 1..total)
             val date=SimpleDateFormat("yyyy-MM-dd",Locale.ROOT).apply{timeZone=TimeZone.getTimeZone("Europe/Zagreb")}.format(Date(c.getLong(2)))
             require(receipt.date>=date)
-            c.getString(1)
+            c.getString(1) to total
         }
         val deadline=FiscalReportingRules.deadline(FiscalReportingRules.Event.PAYMENT,receipt.date)
         require(deadline.kind==FiscalReportingRules.DeadlineKind.MONTHLY_STATUTORY_DATE)
         val rule= requireNotNull(LegalRuleCatalog.rules[LegalCompliance.validateDate(receipt.date)])
         val receiptDigest=FiscalCutover.digest(ReceiptRules.receiptJson(receipt).toString())
-        return JSONObject().put("eventId",event).put("environment","DEMO").put("kind","DEMO_PAYMENT_PREPARATION")
+        return Checked(JSONObject().put("eventId",event).put("environment","DEMO").put("kind","DEMO_PAYMENT_PREPARATION")
             .put("receiptId",receipt.id).put("documentId",document).put("documentDigest",digest)
             .put("receiptDigest",receiptDigest).put("evidenceSha256",FiscalCutover.digest("DEMO_PAYMENT_V1\u0000"+digest+"\u0000"+receiptDigest))
             .put("eventDate",receipt.date).put("amountCents",receipt.cents).put("ruleVersion",rule.version)
-            .put("deadlineDate",requireNotNull(deadline.date))
+            .put("deadlineDate",requireNotNull(deadline.date)),total)
     }
     private fun same(actual:JSONObject,expected:JSONObject):Boolean =
         actual.keys().asSequence().toSet()==expected.keys().asSequence().toSet() &&
@@ -59,9 +61,9 @@ internal object PaymentPreparationStore {
             if(e is Long || e is Int) (a is Long || a is Int) && (a as Number).toLong()==(e as Number).toLong()
             else a==e
         }
-    private fun checkSnapshot(context:Context,db:RecordDatabase,sql:SQLiteDatabase,rows:Map<String,ReceiptEvidence>,j:JSONObject):JSONObject {
+    private fun checkSnapshot(context:Context,db:RecordDatabase,sql:SQLiteDatabase,rows:Map<String,ReceiptEvidence>,j:JSONObject):Checked {
         val expected=snapshot(context,db,sql,requireNotNull(rows[j.getString("receiptId")]),j.getString("documentId"),j.getString("eventId"))
-        require(same(j,expected))
+        require(same(j,expected.json))
         return expected
     }
     private fun insert(context:Context,db:RecordDatabase,sql:SQLiteDatabase,j:JSONObject) {
@@ -72,7 +74,35 @@ internal object PaymentPreparationStore {
         })
     }
 
-    data class Choice(val id:String,val label:String,val customer:String,val date:String)
+    private fun validateTotals(rows:List<Checked>,legacyFull:Boolean=false):Map<String,Long> {
+        val totals=mutableMapOf<String,Long>()
+        for(key in listOf("receiptId","eventId"))require(rows.map{it.json.getString(key)}.distinct().size==rows.size)
+        if(legacyFull)require(rows.map{it.json.getString("documentId")}.distinct().size==rows.size)
+        for(row in rows) {
+            val id=row.json.getString("documentId")
+            val amount=row.json.getLong("amountCents")
+            if(legacyFull)require(amount==row.total)
+            val sum=Math.addExact(totals[id]?:0L,amount)
+            require(sum<=row.total) { "Document overpayment" }
+            totals[id]=sum
+        }
+        return totals
+    }
+    private fun load(context:Context,db:RecordDatabase,sql:SQLiteDatabase,receipts:Map<String,ReceiptEvidence>):List<Checked> {
+        val result=mutableListOf<Checked>()
+        val secure=SecureRecords(context,NS,db)
+        sql.rawQuery("SELECT receiptId,documentId,eventId,payload FROM "+TABLE+" ORDER BY receiptId",null).use{c->
+            while(c.moveToNext()) {
+                require(result.size<ReceiptRules.MAX_ROWS)
+                val j=JSONObject(secure.openSnapshot(c.getString(0),c.getString(3)))
+                require(j.getString("receiptId")==c.getString(0) && j.getString("documentId")==c.getString(1) && j.getString("eventId")==c.getString(2))
+                result.add(checkSnapshot(context,db,sql,receipts,j))
+            }
+        }
+        validateTotals(result)
+        return result
+    }
+    data class Choice(val id:String,val label:String,val customer:String,val date:String,val remainingCents:Long)
     data class Selection(val choices:List<Choice>,val linked:Boolean)
 
     /** Recent eligible DEMO documents only. No automatic selection or allocation. */
@@ -85,35 +115,34 @@ internal object PaymentPreparationStore {
                 sql.setTransactionSuccessful()
                 return@withRecordLock Selection(emptyList(),false)
             }
-            val rows=receipts(context,db,sql)
-            val receipt=requireNotNull(rows[receiptId])
-            val existing=sql.rawQuery("SELECT documentId,eventId,payload FROM "+TABLE+" WHERE receiptId=?",arrayOf(receiptId)).use{c->
-                if(!c.moveToFirst())null else {
-                    val j=JSONObject(SecureRecords(context,NS,db).openSnapshot(receiptId,c.getString(2)))
-                    require(j.getString("receiptId")==receiptId && j.getString("documentId")==c.getString(0) && j.getString("eventId")==c.getString(1))
-                    checkSnapshot(context,db,sql,rows,j)
-                    c.getString(0)
-                }
-            }
-            fun choice(id:String):Choice=sql.rawQuery("SELECT number,premise,registerNo,year,created,payload FROM fiscal_document WHERE id=?",arrayOf(id)).use{c->
+            val receipts=receipts(context,db,sql)
+            val receipt=requireNotNull(receipts[receiptId])
+            val existing=load(context,db,sql,receipts)
+            val totals=validateTotals(existing)
+            val linked=existing.singleOrNull{it.json.getString("receiptId")==receiptId}
+            fun choice(id:String,remaining:Long):Choice=sql.rawQuery("SELECT number,premise,registerNo,year,created,payload FROM fiscal_document WHERE id=?",arrayOf(id)).use{c->
                 require(c.moveToFirst())
                 val p=JSONObject(SecureRecords(context,"fiskai_demo_receipts",db).openSnapshot(id,c.getString(5)))
                 val date=SimpleDateFormat("yyyy-MM-dd",Locale.ROOT).apply{timeZone=TimeZone.getTimeZone("Europe/Zagreb")}.format(Date(c.getLong(4)))
-                Choice(id,c.getLong(0).toString()+"/"+c.getString(1)+"/"+c.getString(2)+" ("+c.getInt(3)+")",p.getString("customer"),date)
+                Choice(id,c.getLong(0).toString()+"/"+c.getString(1)+"/"+c.getString(2)+" ("+c.getInt(3)+")",p.getString("customer"),date,remaining)
             }
-            val choices=if(existing!=null)listOf(choice(existing)) else {
-                val ids=sql.rawQuery("SELECT id FROM fiscal_document WHERE NOT EXISTS(SELECT 1 FROM demo_payment_preparation p WHERE p.documentId=fiscal_document.id) ORDER BY created DESC,id DESC LIMIT 100",null).use{c->
+            val choices=if(linked!=null) {
+                val id=linked.json.getString("documentId")
+                listOf(choice(id,linked.total-(totals[id]?:0L)))
+            } else {
+                val ids=sql.rawQuery("SELECT id FROM fiscal_document ORDER BY created DESC,id DESC LIMIT 100",null).use{c->
                     buildList{while(c.moveToNext())add(c.getString(0))}
                 }
                 ids.mapNotNull{id->
                     try {
-                        snapshot(context,db,sql,receipt,id,"00000000-0000-4000-8000-000000000001")
-                        choice(id)
+                        val checked=snapshot(context,db,sql,receipt,id,"00000000-0000-4000-8000-000000000001")
+                        val remaining=checked.total-(totals[id]?:0L)
+                        if(receipt.cents<=remaining)choice(id,remaining) else null
                     } catch(_:IllegalArgumentException){null} catch(_:org.json.JSONException){null}
                 }
             }
             sql.setTransactionSuccessful()
-            Selection(choices,existing!=null)
+            Selection(choices,linked!=null)
         }finally{sql.endTransaction()}
     }
 
@@ -126,45 +155,37 @@ internal object PaymentPreparationStore {
             check(FiscalCutover.active(sql))
             val rows=receipts(context,db,sql)
             val receipt=requireNotNull(rows[receiptId])
-            val existing=sql.rawQuery("SELECT receiptId,documentId,eventId,payload FROM "+TABLE+" WHERE receiptId=? OR documentId=?",arrayOf(receiptId,documentId)).use{c->
-                if(!c.moveToFirst())null else {
-                    require(c.getString(0)==receiptId && c.getString(1)==documentId)
-                    val event=c.getString(2)
-                    val j=JSONObject(SecureRecords(context,NS,db).openSnapshot(receiptId,c.getString(3)))
-                    require(j.getString("eventId")==event && j.getString("receiptId")==receiptId && j.getString("documentId")==documentId)
-                    checkSnapshot(context,db,sql,rows,j)
-                    require(!c.moveToNext());event
+            val existing=load(context,db,sql,rows)
+            val linked=existing.singleOrNull{it.json.getString("receiptId")==receiptId}
+            val event=if(linked!=null) {
+                require(linked.json.getString("documentId")==documentId)
+                linked.json.getString("eventId")
+            } else {
+                require(existing.size<ReceiptRules.MAX_ROWS)
+                UUID.randomUUID().toString().also{
+                    val checked=snapshot(context,db,sql,receipt,documentId,it)
+                    validateTotals(existing+checked)
+                    insert(context,db,sql,checked.json)
                 }
             }
-            val event=existing?:UUID.randomUUID().toString().also{insert(context,db,sql,snapshot(context,db,sql,receipt,documentId,it))}
             sql.setTransactionSuccessful()
             event
         } finally {sql.endTransaction()}
     }
     /** Called under record lock within the workspace transaction. */
     fun export(context:Context,db:RecordDatabase,sql:SQLiteDatabase):JSONArray {
-        val result=JSONArray()
-        sql.rawQuery("SELECT receiptId,documentId,eventId,payload FROM "+TABLE+" ORDER BY receiptId",null).use{c->
-            if(!c.moveToFirst())return result
-            check(BuildConfig.DEMO_MODE && FiscalCutover.active(sql))
-            val rows=receipts(context,db,sql)
-            val secure=SecureRecords(context,NS,db)
-            do {
-                require(result.length()<ReceiptRules.MAX_ROWS)
-                val j=JSONObject(secure.openSnapshot(c.getString(0),c.getString(3)))
-                require(j.getString("receiptId")==c.getString(0) && j.getString("documentId")==c.getString(1) && j.getString("eventId")==c.getString(2))
-                result.put(checkSnapshot(context,db,sql,rows,j))
-            } while(c.moveToNext())
-        }
-        return result
+        val empty=sql.rawQuery("SELECT 1 FROM "+TABLE+" LIMIT 1",null).use{!it.moveToFirst()}
+        if(empty)return JSONArray()
+        check(BuildConfig.DEMO_MODE && FiscalCutover.active(sql))
+        return JSONArray().apply{load(context,db,sql,receipts(context,db,sql)).forEach{put(it.json)}}
     }
-    fun restore(context:Context,db:RecordDatabase,sql:SQLiteDatabase,array:JSONArray) {
+    fun restore(context:Context,db:RecordDatabase,sql:SQLiteDatabase,array:JSONArray,legacyFull:Boolean) {
         check(BuildConfig.DEMO_MODE && FiscalCutover.active(sql))
         require(array.length() in 1..ReceiptRules.MAX_ROWS)
         require(export(context,db,sql).length()==0)
         val receipts=receipts(context,db,sql)
         val rows=List(array.length()){checkSnapshot(context,db,sql,receipts,array.getJSONObject(it))}
-        for(key in listOf("receiptId","documentId","eventId"))require(rows.map{it.getString(key)}.distinct().size==rows.size)
-        rows.forEach{insert(context,db,sql,it)}
+        validateTotals(rows,legacyFull)
+        rows.forEach{insert(context,db,sql,it.json)}
     }
 }
