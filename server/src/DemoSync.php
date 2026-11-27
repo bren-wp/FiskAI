@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__.'/FiscalReportingRules.php';
+require_once __DIR__.'/DemoDeviceProof.php';
 
 /** Unverified DEMO metadata replication only. Never queues fiscal transport. */
 final class DemoSyncAuthException extends RuntimeException {}
@@ -71,16 +72,18 @@ final class DemoSync {
     /** Complete bounded immutable metadata snapshot, scoped by the device credential.
      * Same lock order as push. A single transaction avoids pagination omissions.
      */
-    public function pull(string $authorization,array $request):array {
+    public function pull(string $authorization,array $request,?array $proof=null):array {
         if(!preg_match('/\ABearer ([0-9a-f]{64})\z/D',$authorization,$m))throw new DemoSyncAuthException('Unauthorized.');
         if(count($request)!==2||($request['protocol']??null)!==1||!is_string($request['subjectId']??null))
             throw new InvalidArgumentException('Invalid snapshot request.');
         self::uuid($request['subjectId']);
         $this->db->beginTransaction();
         try {
-            $s=$this->db->prepare('SELECT subject_id FROM demo_sync_device WHERE token_sha256=? AND revoked_at IS NULL AND expires_at>UTC_TIMESTAMP(6) FOR UPDATE');
-            $s->execute([hash('sha256',$m[1])]);$subject=$s->fetchColumn();
-            if(!is_string($subject)||!hash_equals($subject,$request['subjectId']))throw new DemoSyncAuthException('Unauthorized.');
+            $s=$this->db->prepare('SELECT device_id,subject_id FROM demo_sync_device WHERE token_sha256=? AND revoked_at IS NULL AND expires_at>UTC_TIMESTAMP(6) FOR UPDATE');
+            $tokenHash=hash('sha256',$m[1]);$s->execute([$tokenHash]);$device=$s->fetch(PDO::FETCH_ASSOC);
+            if(!$device||!hash_equals($device['subject_id'],$request['subjectId']))throw new DemoSyncAuthException('Unauthorized.');
+            $subject=$device['subject_id'];
+            (new DemoDeviceProof($this->db))->consume($device['device_id'],$subject,$tokenHash,'demo-sync-pull',$request,$proof);
             $s=$this->db->prepare('SELECT subject_id FROM demo_sync_subject WHERE subject_id=? FOR UPDATE');
             $s->execute([$subject]);if($s->fetchColumn()!==$subject)throw new RuntimeException('Scope unavailable.');
             $s=$this->db->prepare('SELECT event_id,receipt_id,document_id,evidence_sha256,event_date,amount_cents,rule_version,deadline_date,payload_sha256 FROM demo_sync_payment WHERE subject_id=? ORDER BY event_id LIMIT 2001 FOR UPDATE');
@@ -100,7 +103,7 @@ final class DemoSync {
         }catch(Throwable $e){if($this->db->inTransaction())$this->db->rollBack();throw $e;}
     }
     /** Authenticate inside the transaction. Every batch either commits in full or rolls back. */
-    public function push(string $authorization,array $request):array {
+    public function push(string $authorization,array $request,?array $proof=null):array {
         if(!preg_match('/\ABearer ([0-9a-f]{64})\z/D',$authorization,$m))throw new DemoSyncAuthException('Unauthorized.');
         if(count($request)!==3||($request['protocol']??null)!==1||!is_string($request['subjectId']??null)
             ||!is_array($request['events']??null)||!array_is_list($request['events'])||count($request['events'])<1||count($request['events'])>50)
@@ -108,9 +111,11 @@ final class DemoSync {
         self::uuid($request['subjectId']);
         $this->db->beginTransaction();
         try {
-            $s=$this->db->prepare('SELECT subject_id FROM demo_sync_device WHERE token_sha256=? AND revoked_at IS NULL AND expires_at>UTC_TIMESTAMP(6) FOR UPDATE');
-            $s->execute([hash('sha256',$m[1])]);$subject=$s->fetchColumn();
-            if(!is_string($subject)||!hash_equals($subject,$request['subjectId']))throw new DemoSyncAuthException('Unauthorized.');
+            $s=$this->db->prepare('SELECT device_id,subject_id FROM demo_sync_device WHERE token_sha256=? AND revoked_at IS NULL AND expires_at>UTC_TIMESTAMP(6) FOR UPDATE');
+            $tokenHash=hash('sha256',$m[1]);$s->execute([$tokenHash]);$device=$s->fetch(PDO::FETCH_ASSOC);
+            if(!$device||!hash_equals($device['subject_id'],$request['subjectId']))throw new DemoSyncAuthException('Unauthorized.');
+            $subject=$device['subject_id'];
+            (new DemoDeviceProof($this->db))->consume($device['device_id'],$subject,$tokenHash,'demo-sync',$request,$proof);
             $s=$this->db->prepare('SELECT subject_id FROM demo_sync_subject WHERE subject_id=? FOR UPDATE');
             $s->execute([$subject]);if($s->fetchColumn()!==$subject)throw new RuntimeException('Scope unavailable.');
             $s=$this->db->prepare('SELECT COUNT(*) FROM demo_sync_payment WHERE subject_id=?');
