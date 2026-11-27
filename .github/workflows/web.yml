@@ -11,12 +11,18 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        database: ['mysql:8.4', 'mariadb:11.4']
     services:
       mysql:
-        image: mysql:8.4
+        image: ${{ matrix.database }}
         env:
           MYSQL_ROOT_PASSWORD: ci-only-password
           MYSQL_DATABASE: fiskai_test
+          MARIADB_ROOT_PASSWORD: ci-only-password
+          MARIADB_DATABASE: fiskai_test
         ports: ['3306:3306']
         options: --health-cmd="mysqladmin ping -h localhost" --health-interval=10s --health-timeout=5s --health-retries=12
     env:

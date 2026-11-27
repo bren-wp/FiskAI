@@ -71,6 +71,8 @@ jobs:
           if gh release view v0.1.0 >/dev/null 2>&1; then
             echo "Release already exists; no replacement"; exit 0
           fi
+          current="$(gh api "repos/$GH_REPO/git/ref/heads/feature/native-alpha" --jq .object.sha)"
+          if [ "$current" != "$GITHUB_SHA" ]; then echo "Newer commit exists; skip outdated release"; exit 0; fi
           (cd dist && sha256sum -c SHA256SUMS.txt)
           (cd screenshots && zip -q ../dist/FiskAI-real-screenshots.zip *.png)
           (cd dist && sha256sum *.apk *.aab *.zip > SHA256SUMS.txt)

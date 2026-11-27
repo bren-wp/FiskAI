@@ -7,7 +7,7 @@ import android.database.sqlite.SQLiteOpenHelper
 
 /** Stores authenticated ciphertext only. No destructive schema fallback. */
 internal class RecordDatabase(context: Context, databaseName: String = "fiskai_records.db") :
-    SQLiteOpenHelper(context.applicationContext, databaseName, null, 3) {
+    SQLiteOpenHelper(context.applicationContext, databaseName, null, 4) {
 
     companion object {
         @Volatile private var instance: RecordDatabase? = null
@@ -21,12 +21,14 @@ internal class RecordDatabase(context: Context, databaseName: String = "fiskai_r
         db.execSQL("CREATE TABLE legacy_migration (namespace TEXT NOT NULL, record_key TEXT NOT NULL, PRIMARY KEY(namespace,record_key))")
         createCisJournal(db)
         createDemoLedger(db)
+        createStock(db)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        require(oldVersion in 1..2 && newVersion == 3)
+        require(oldVersion in 1..3 && newVersion == 4)
         if(oldVersion == 1) createCisJournal(db)
-        createDemoLedger(db)
+        if(oldVersion < 3) createDemoLedger(db)
+        createStock(db)
     }
 
     private fun createCisJournal(db: SQLiteDatabase) {
@@ -38,6 +40,14 @@ internal class RecordDatabase(context: Context, databaseName: String = "fiskai_r
         db.execSQL("CREATE TABLE demo_receipt (id TEXT PRIMARY KEY NOT NULL, draft_id TEXT NOT NULL UNIQUE, year INTEGER NOT NULL, premise TEXT NOT NULL, register_no TEXT NOT NULL, number INTEGER NOT NULL CHECK(number>=1), created INTEGER NOT NULL, payload TEXT NOT NULL, UNIQUE(year,premise,register_no,number))")
         db.execSQL("CREATE TRIGGER demo_receipt_no_update BEFORE UPDATE ON demo_receipt BEGIN SELECT RAISE(ABORT,'Immutable test snapshot'); END")
         db.execSQL("CREATE TRIGGER demo_receipt_no_delete BEFORE DELETE ON demo_receipt BEGIN SELECT RAISE(ABORT,'Immutable test snapshot'); END")
+    }
+
+    private fun createStock(db: SQLiteDatabase) {
+        db.execSQL("CREATE TABLE stock_balance (product_id TEXT PRIMARY KEY NOT NULL, quantity INTEGER NOT NULL CHECK(quantity>=0))")
+        db.execSQL("CREATE TABLE stock_event (id TEXT PRIMARY KEY NOT NULL, product_id TEXT NOT NULL, delta INTEGER NOT NULL CHECK(delta<>0), quantity_after INTEGER NOT NULL CHECK(quantity_after>=0), created INTEGER NOT NULL, payload TEXT NOT NULL)")
+        db.execSQL("CREATE INDEX stock_event_product ON stock_event(product_id,created)")
+        db.execSQL("CREATE TRIGGER stock_event_no_update BEFORE UPDATE ON stock_event BEGIN SELECT RAISE(ABORT,'Immutable stock movement'); END")
+        db.execSQL("CREATE TRIGGER stock_event_no_delete BEFORE DELETE ON stock_event BEGIN SELECT RAISE(ABORT,'Immutable stock movement'); END")
     }
 
     private fun values(namespace: String, key: String) = ContentValues().apply {
