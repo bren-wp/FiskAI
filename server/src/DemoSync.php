@@ -36,6 +36,23 @@ final class DemoSync {
         $s=$this->db->prepare('UPDATE demo_sync_device SET revoked_at=UTC_TIMESTAMP(6) WHERE device_id=? AND revoked_at IS NULL');
         $s->execute([$device]);return $s->rowCount()===1;
     }
+    /** Rotate an active credential atomically. Revoked credentials are never reactivated. */
+    public function rotate(string $device):array {
+        if(PHP_SAPI!=='cli')throw new LogicException('CLI only.');
+        self::uuid($device);
+        $token=bin2hex(random_bytes(32));
+        $this->db->beginTransaction();
+        try {
+            $s=$this->db->prepare('SELECT subject_id FROM demo_sync_device WHERE device_id=? AND revoked_at IS NULL FOR UPDATE');
+            $s->execute([$device]);$subject=$s->fetchColumn();
+            if(!is_string($subject))throw new DemoSyncAuthException('Device unavailable.');
+            $s=$this->db->prepare('UPDATE demo_sync_device SET token_sha256=?,expires_at=UTC_TIMESTAMP(6)+INTERVAL 30 DAY WHERE device_id=? AND revoked_at IS NULL');
+            $s->execute([hash('sha256',$token),$device]);
+            if($s->rowCount()!==1)throw new RuntimeException('Rotation failed.');
+            $this->db->commit();
+            return ['subjectId'=>$subject,'deviceId'=>$device,'token'=>$token];
+        }catch(Throwable $e){if($this->db->inTransaction())$this->db->rollBack();throw $e;}
+    }
     private static function fields(array $row):array {
         $keys=['eventId','receiptId','documentId','evidenceSha256','eventDate','amountCents','ruleVersion','deadlineDate'];
         if(count($row)!==count($keys)||array_diff($keys,array_keys($row)))throw new InvalidArgumentException('Invalid event fields.');
