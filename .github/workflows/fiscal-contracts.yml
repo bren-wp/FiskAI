@@ -1,7 +1,7 @@
 name: Official CIS contract acquisition
 on:
   pull_request:
-    paths: ['scripts/fetch-fiscal-contracts.py','scripts/verify-fiscal-contracts.py','server/contracts/**','server/src/FiscalContract.php','server/src/FiscalSignature.php','server/tests/OfficialFiscalContractTest.php','server/src/FiscalResponse.php','server/src/CisEducResponseEvidence.php','server/database/**','server/tests/FiscalResponseTest.php','.github/workflows/fiscal-contracts.yml']
+    paths: ['scripts/fetch-fiscal-contracts.py','scripts/verify-fiscal-contracts.py','server/contracts/**','server/src/FiscalContract.php','server/src/FiscalSignature.php','server/src/CisEducRequestPreparation.php','server/tests/OfficialFiscalContractTest.php','server/src/FiscalResponse.php','server/src/CisEducResponseEvidence.php','server/database/**','server/tests/FiscalResponseTest.php','.github/workflows/fiscal-contracts.yml']
   workflow_dispatch:
 permissions:
   contents: read
