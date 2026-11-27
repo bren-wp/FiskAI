@@ -9,8 +9,9 @@ android {
         applicationId = "hr.brendigo.fiskai"
         minSdk = 24
         targetSdk = 36
-        versionCode = 7
-        versionName = "0.1.0-alpha07"
+        versionCode = 8
+        versionName = "0.1.0-alpha08"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     buildFeatures { compose = true }
@@ -21,4 +22,6 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.ui:ui")
     testImplementation("junit:junit:4.13.2")
+    androidTestImplementation("androidx.test:runner:1.7.0")
+    androidTestImplementation("androidx.test.ext:junit:1.3.0")
 }

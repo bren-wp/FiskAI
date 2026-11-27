@@ -12,7 +12,11 @@ import javax.crypto.spec.GCMParameterSpec
 
 /** App-private records, authenticated encryption and in-place migration of alpha plaintext.
  *  An unreadable record is never replaced with an empty value. */
-internal class SecureRecords(context: Context, private val namespace: String) {
+internal class SecureRecords(
+    context: Context,
+    private val namespace: String,
+    private val database: RecordDatabase = RecordDatabase.shared(context)
+) {
     private val prefs = context.getSharedPreferences(namespace, Context.MODE_PRIVATE)
     companion object {
         private const val ALIAS = "fiskai.local.records.v1"
@@ -50,19 +54,44 @@ internal class SecureRecords(context: Context, private val namespace: String) {
         cipher.updateAAD(aad(name))
         return cipher.doFinal(raw.copyOfRange(12,raw.size)).toString(Charsets.UTF_8)
     }
+    private fun validateJson(value: String) {
+        val parser = org.json.JSONTokener(value)
+        val decoded = parser.nextValue()
+        require(decoded is org.json.JSONArray || decoded is org.json.JSONObject)
+        require(parser.nextClean() == '\u0000')
+    }
+    private fun migrate(name: String) {
+        database.migrate(namespace,name) {
+            val legacy = prefs.getString(name,null)
+            if(legacy == null) null
+            else if(legacy.startsWith(PREFIX)) {
+                validateJson(decrypt(name,legacy))
+                legacy
+            } else {
+                validateJson(legacy)
+                encrypt(name,legacy)
+            }
+        }
+        // Only remove the legacy value after the SQLite transaction committed.
+        // On failed cleanup the next call retries; the database is authoritative.
+        if(prefs.contains(name)) check(prefs.edit().remove(name).commit()) { "Legacy cleanup failed" }
+    }
     fun getString(name: String, default: String): String = synchronized(lock) {
-        val current = prefs.getString(name, null) ?: return@synchronized default
-        if(current.startsWith(PREFIX)) return@synchronized decrypt(name,current)
-        // Validate legacy JSON before replacing it. The original data remains on failed commit.
-        org.json.JSONTokener(current).nextValue().also { require(it is org.json.JSONArray || it is org.json.JSONObject) }
-        check(prefs.edit().putString(name, encrypt(name,current)).commit()) { "Migration failed" }
-        current
+        migrate(name)
+        val current = database.read(namespace,name) ?: return@synchronized default
+        check(current.startsWith(PREFIX)) { "Unencrypted database record" }
+        decrypt(name,current).also(::validateJson)
     }
     fun write(name: String, value: String): Boolean = synchronized(lock) {
         runCatching {
-            val current = prefs.getString(name,null)
-            if(current != null && current.startsWith(PREFIX)) decrypt(name,current)
-            prefs.edit().putString(name,encrypt(name,value)).commit()
+            validateJson(value)
+            migrate(name)
+            database.read(namespace,name)?.let { current ->
+                check(current.startsWith(PREFIX))
+                validateJson(decrypt(name,current))
+            }
+            database.write(namespace,name,encrypt(name,value))
+            true
         }.getOrDefault(false)
     }
 }

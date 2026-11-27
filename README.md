@@ -8,6 +8,8 @@ PDF nacrte moguće je izvesti u odabranu mapu uređaja. Lokalni zapisi šifriran
 
 Lokalna provjera PKCS#12 certifikata (.p12/.pfx) prikazuje valjanost, izdavatelja i otisak. Opcionalni lokalni sef testnih certifikata sprema šifriranu PKCS#12 kopiju; lozinka se nikada ne sprema. Sef nije produkcijski fiskalni potpisnik.
 
+Poslovni zapisi koriste transakcijsku SQLite pohranu s AES-GCM šifriranjem sadržaja i migracijom postojećih lokalnih zapisa. Lokalna pohrana nije zamjena za sigurnosnu kopiju.
+
 ## Dostupnost
 
 Trenutačno: razvojna verzija. Nacrti nisu izdani porezni dokumenti. Fiskalizacija, eRačuni, eIzvještavanje i sinkronizacija još nisu aktivirani.
