@@ -21,6 +21,9 @@ $prepareDispatch=fn($value,$doc=null)=>$dispatch->prepare($subject,$doc??$docume
 dispatchCheck($prepareDispatch($invoice)===$message);
 dispatchCheck($prepareDispatch($invoice)===$message);
 dispatchCheck($dispatch->state($subject,$message)==='PREPARED');
+putenv('FISKAI_CIS_EDUC_ENABLED=0');
+dispatchReject(LogicException::class,fn()=>$dispatch->dispatchAuthorized($subject,$message,$credential,$credential,$dir,$storageKey));
+dispatchCheck($dispatch->state($subject,$message)==='PREPARED');
 $original=$dispatch->open($subject,$message,$storageKey);
 dispatchReject(RuntimeException::class,fn()=>$dispatch->open($subject,$message,random_bytes(32)));
 dispatchReject(DomainException::class,fn()=>$dispatch->open('91000000-0000-4000-8000-000000000002',$message,$storageKey));
@@ -58,7 +61,8 @@ dispatchReject(DomainException::class,fn()=>$verifyDispatch($response,str_repeat
 dispatchReject(InvalidArgumentException::class,fn()=>$verifyDispatch($xmlResponse));
 dispatchReject(InvalidArgumentException::class,fn()=>$verifyDispatch(str_replace($jir,'94000000-0000-4000-8000-000000000002',$response)));
 dispatchCheck($dispatch->state($subject,$message)==='UNCERTAIN');
-dispatchCheck($verifyDispatch($response)===$jir);
+dispatchReject(InvalidArgumentException::class,fn()=>$dispatch->recoverVerifiedResponse($subject,$message,$xmlResponse,$credential,$dir,$storageKey));
+dispatchCheck($dispatch->recoverVerifiedResponse($subject,$message,$response,$credential,$dir,$storageKey)===$jir);
 dispatchCheck($dispatch->state($subject,$message)==='VERIFIED');
 dispatchCheck($verifyDispatch($response)===$jir);
 dispatchCheck((new CisEducResponseEvidence($db))->open($subject,$message,$storageKey)===$response);
