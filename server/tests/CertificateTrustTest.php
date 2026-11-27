@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__.'/../src/CisCertificateTrust.php';
-if($argc!==5)throw new RuntimeException('Expected leaf, root, valid CRL and revoked CRL fixtures.');
+if($argc!==6)throw new RuntimeException('Expected leaf, root, valid, revoked and expired CRL fixtures.');
 $cert=openssl_x509_read(file_get_contents($argv[1]));
 if($cert===false)throw new RuntimeException('Fixture unavailable.');
 $pin=openssl_x509_fingerprint($cert,'sha256');
@@ -12,6 +12,7 @@ function rejectTrust(callable $f):void {
     throw new RuntimeException('Invalid certificate trust accepted.');
 }
 rejectTrust(fn()=>CisCertificateTrust::verify($cert,$pin,$ca,$revoked));
+rejectTrust(fn()=>CisCertificateTrust::verify($cert,$pin,$ca,file_get_contents($argv[5])));
 rejectTrust(fn()=>CisCertificateTrust::verify($cert,str_repeat('0',64),$ca,$valid));
 rejectTrust(fn()=>CisCertificateTrust::verify($cert,$pin,$ca,'invalid CRL'));
 rejectTrust(fn()=>CisCertificateTrust::verify($cert,$pin,'invalid root',$valid));
