@@ -73,4 +73,6 @@ dispatchCheck($dispatch->state($subject,$message)==='VERIFIED');
 dispatchCheck($verifyDispatch($response)===$jir);
 dispatchCheck((new CisEducResponseEvidence($db))->open($subject,$message,$storageKey)===$response);
 dispatchReject(DomainException::class,fn()=>$dispatch->reserve($subject,$message,$storageKey));
+$s=$db->prepare('SELECT event_type FROM cis_educ_dispatch_audit WHERE message_id=? ORDER BY event_type');
+$s->execute([$message]);dispatchCheck($s->fetchAll(PDO::FETCH_COLUMN)===['PREPARED','RESERVED','UNCERTAIN','VERIFIED']);
 echo "Offline EDUC dispatch: encrypted request, single reservation, crash recovery, authenticated response and rollback passed.\n";
