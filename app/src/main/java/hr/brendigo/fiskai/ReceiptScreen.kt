@@ -35,6 +35,7 @@ internal fun ReceiptScreen(page:String,business:BusinessProfile,onBusy:(Boolean)
     var syncUrl by remember{mutableStateOf("")}
     var syncSubject by remember{mutableStateOf("")}
     var syncToken by remember{mutableStateOf("")}
+    var enrollment by remember{mutableStateOf<DemoDeviceIdentity.Enrollment?>(null)}
     var manual by remember{mutableStateOf(false)}
     var reference by remember{mutableStateOf("")}
     var amount by remember{mutableStateOf("")}
@@ -149,6 +150,22 @@ internal fun ReceiptScreen(page:String,business:BusinessProfile,onBusy:(Boolean)
             OutlinedTextField(syncUrl,{syncUrl=it.take(512)},label={Text("HTTPS adresa API-ja")},singleLine=true)
             OutlinedTextField(syncSubject,{syncSubject=it.take(36)},label={Text("ID testnog subjekta")},singleLine=true)
             OutlinedTextField(syncToken,{syncToken=it.take(64)},label={Text("Token uređaja")},singleLine=true,visualTransformation=PasswordVisualTransformation())
+            OutlinedButton(enabled=!busy,onClick={
+                working(true)
+                scope.launch{try{
+                    withContext(Dispatchers.IO){runCatching{DemoDeviceIdentity.enrollment()}}
+                        .onSuccess{enrollment=it}
+                        .onFailure{message="Ključ uređaja nije dostupan."}
+                }finally{working(false)}}
+            }){Text("Pripremi javni ključ uređaja")}
+            enrollment?.let{key->
+                Text(if(key.hardwareBacked)"Ključ zaštićen hardverom" else "Ključ zaštićen sustavom Android Keystore")
+                TextButton(enabled=!busy,onClick={
+                    val clipboard=context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    clipboard.setPrimaryClip(android.content.ClipData.newPlainText("FiskAI javni ključ",key.publicKey))
+                    message="Javni ključ kopiran. Predajte ga administratoru vlastitog servera."
+                }){Text("Kopiraj javni ključ")}
+            }
         }
     },confirmButton={TextButton(enabled=!busy&&syncToken.matches(Regex("[0-9a-f]{64}"))&&syncUrl.isNotBlank()&&syncSubject.isNotBlank(),onClick={
         val url=syncUrl;val subject=syncSubject;val token=syncToken
