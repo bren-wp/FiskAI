@@ -156,6 +156,18 @@ final class EducBusinessLedger {
             if($own)$this->db->commit();return $result;
         }catch(Throwable $e){if($own&&$this->db->inTransaction())$this->db->rollBack();throw $e;}
     }
+    /** Operator export for a separate monotonic witness; no invoice contents or signing keys. */
+    public function checkpointHistory(string $subject,string $storageKey):array {
+        if($this->db->inTransaction())throw new LogicException('Own checkpoint transaction required.');
+        $this->db->beginTransaction();
+        try{
+            $scope=$this->subject($subject,true);
+            $rows=$this->checkedRows($scope,$storageKey);
+            $heads=[self::ZERO];foreach($rows as $entry)$heads[]=$entry['mac'];
+            $result=['protocol'=>'FISKAI-EDUC-HISTORY-V1','subject'=>$subject,'keyId'=>$scope['key_id'],'heads'=>$heads];
+            $this->db->commit();return $result;
+        }catch(Throwable $e){if($this->db->inTransaction())$this->db->rollBack();throw $e;}
+    }
     public function read(string $subject,string $document,string $storageKey):array {
         self::uuid($document);
         $own=!$this->db->inTransaction();
