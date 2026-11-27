@@ -65,6 +65,9 @@ try{
 }finally{$db->rollBack();}
 $dispatch=new CisEducDispatch($db);
 ledgerCheck($dispatch->prepareFromLedger($subject,$doc,$key,$credential,$pin,$pin,$dir,$storageKey)===$message);
+putenv('FISKAI_EDUC_ANCHOR_PUBLIC_KEY_SHA256');
+ledgerReject(LogicException::class,fn()=>$dispatch->reserve($subject,$message,$storageKey,true));
+ledgerCheck($dispatch->state($subject,$message)==='PREPARED');
 $soap=$dispatch->open($subject,$message,$storageKey);
 EducBusinessLedger::assertBound($entry['document'],$soap,$credential);
 ledgerReject(DomainException::class,fn()=>EducBusinessLedger::assertBound($next['document'],$soap,$credential));
