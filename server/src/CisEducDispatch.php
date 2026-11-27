@@ -19,7 +19,7 @@ final class CisEducDispatch {
         catch(Throwable $e){if($this->db->inTransaction())$this->db->rollBack();throw $e;}
     }
     private function row(string $subject,string $message,bool $lock=false):array {
-        $s=$this->db->prepare('SELECT d.*,e.document_sha256,e.trust_sha256,e.key_id,e.request_sha256 AS evidence_request FROM cis_educ_dispatch d JOIN cis_educ_response_evidence e ON e.message_id=d.message_id AND e.subject_id=d.subject_id AND e.document_id=d.document_id WHERE d.subject_id=? AND d.message_id=?'.($lock?' FOR UPDATE':''));
+        $s=$this->db->prepare('SELECT d.*,e.document_sha256,e.trust_sha256,e.key_id,e.request_sha256 AS evidence_request,e.response_sha256 AS evidence_response,e.verified_at AS evidence_verified_at,e.jir AS evidence_jir FROM cis_educ_dispatch d JOIN cis_educ_response_evidence e ON e.message_id=d.message_id AND e.subject_id=d.subject_id AND e.document_id=d.document_id WHERE d.subject_id=? AND d.message_id=?'.($lock?' FOR UPDATE':''));
         $s->execute([$subject,$message]);$row=$s->fetch(PDO::FETCH_ASSOC);
         if(!$row||$row['request_sha256']!==$row['evidence_request'])throw new DomainException('Unknown or inconsistent dispatch.');
         return $row;
@@ -55,9 +55,13 @@ final class CisEducDispatch {
                 VALUES (?,?,?,?,?,?,'PREPARED',UTC_TIMESTAMP(6)) ON DUPLICATE KEY UPDATE message_id=message_id");
             $s->execute([$message,$subject,$document,$signerPin,$p['requestSha256'],base64_encode($nonce.$tag.$cipher)]);
             $stored=$this->row($subject,$message,true);
+            if($stored['state']==='PREPARED'&&self::hasResponse($stored))throw new DomainException('Response already recorded; dispatch requires reconciliation.');
             if(!hash_equals($p['soap'],self::decrypt($stored,$storageKey)))throw new DomainException('Conflicting request.');
             return $message;
         });
+    }
+    private static function hasResponse(array $r):bool {
+        return $r['evidence_response']!==null||$r['evidence_verified_at']!==null||$r['evidence_jir']!==null;
     }
     public function open(string $subject,string $message,string $key):string {
         return self::decrypt($this->row($subject,$message),$key);
@@ -69,7 +73,7 @@ final class CisEducDispatch {
     public function reserve(string $subject,string $message,string $storageKey):array {
         return $this->transaction(function()use($subject,$message,$storageKey){
             $r=$this->row($subject,$message,true);
-            if($r['state']!=='PREPARED')throw new DomainException('Already reserved or resolved.');
+            if($r['state']!=='PREPARED'||self::hasResponse($r))throw new DomainException('Already reserved or resolved.');
             $soap=self::decrypt($r,$storageKey);$token=bin2hex(random_bytes(32));
             $s=$this->db->prepare("UPDATE cis_educ_dispatch SET state='RESERVED',reservation_sha256=?,reserved_at=UTC_TIMESTAMP(6),updated_at=UTC_TIMESTAMP(6) WHERE message_id=? AND subject_id=? AND state='PREPARED'");
             $s->execute([hash('sha256',$token),$message,$subject]);
