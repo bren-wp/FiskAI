@@ -85,6 +85,24 @@ def main():
             require(("HR-BR-CL-2" in croatian) == (name == "bad-kpd"), "Wrong HR code-list assertion outcome")
             require(result["dispatchAuthorized"] is False and result["officialAcceptance"] is False, "Unexpected authorization")
             results[name] = {"enFailedAssertions": sorted(en), "hrFailedAssertions": sorted(croatian)}
+    # A complete positive example must produce zero findings in both actual reports.
+    positive = Path(__file__).with_name("fixtures") / "f2-positive-invoice.xml"
+    good = runner.run(args.archives, positive, args.en_xslt, en_pin, hr, hr_pin, args.output / "complete-invoice")
+    results["complete-invoice"] = {"enFailedAssertions": sorted(findings(good["en16931"])),
+                                  "hrFailedAssertions": sorted(findings(good["hrCius"]))}
+    require(not good["en16931"]["findings"] and not good["hrCius"]["findings"],
+            "Complete invoice has validation findings; inspect preserved SVRL")
+    with tempfile.TemporaryDirectory() as work:
+        changed = Path(work) / "wrong-total.xml"
+        data = positive.read_bytes()
+        altered = data.replace(b'<cbc:PayableAmount currencyID="EUR">12.50</cbc:PayableAmount>',
+                               b'<cbc:PayableAmount currencyID="EUR">12.51</cbc:PayableAmount>')
+        require(data != altered, "Monetary mutation failed")
+        changed.write_bytes(altered)
+        bad = runner.run(args.archives, changed, args.en_xslt, en_pin, hr, hr_pin, args.output / "wrong-total")
+        require("BR-CO-16" in findings(bad["en16931"]), "Expected payable amount assertion missing")
+        results["wrong-total"] = {"enFailedAssertions": sorted(findings(bad["en16931"])),
+                                  "hrFailedAssertions": sorted(findings(bad["hrCius"]))}
     summary = {"status": "DUAL_SCHEMATRON_DIAGNOSTIC_REGRESSION", "compilerSha256": pins,
                "enStylesheetSha256": en_pin, "hrStylesheetSha256": hr_pin, "cases": results,
                "officialAcceptance": False, "dispatchAuthorized": False}
