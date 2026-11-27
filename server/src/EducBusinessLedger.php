@@ -103,16 +103,16 @@ final class EducBusinessLedger {
     }
     /** Canonical externally attestable head. Does not itself create external trust. */
     public function checkpoint(string $subject,string $storageKey):array {
-        if($this->db->inTransaction())throw new LogicException('Own checkpoint transaction required.');
-        $this->db->beginTransaction();
+        $own=!$this->db->inTransaction();
+        if($own)$this->db->beginTransaction();
         try {
             $scope=$this->subject($subject,true);
             $rows=$this->checkedRows($scope,$storageKey);
             $last=$rows?end($rows)['mac']:self::ZERO;
             $result=['protocol'=>'FISKAI-EDUC-HEAD-V1','subject'=>$subject,'keyId'=>$scope['key_id'],
                 'position'=>count($rows),'head'=>$last];
-            $this->db->commit();return $result;
-        }catch(Throwable $e){if($this->db->inTransaction())$this->db->rollBack();throw $e;}
+            if($own)$this->db->commit();return $result;
+        }catch(Throwable $e){if($own&&$this->db->inTransaction())$this->db->rollBack();throw $e;}
     }
     public function read(string $subject,string $document,string $storageKey):array {
         self::uuid($document);
