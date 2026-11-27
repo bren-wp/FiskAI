@@ -179,7 +179,12 @@ if(getenv('FISKAI_CI_RECOVERY_TEST')==='1'){
         ledgerReject(LogicException::class,fn()=>$recovered->dispatchAuthorized($subject,$secondMessage,$credential,$credential,$dir,$storageKey));
         $s=$target->prepare('SELECT COUNT(*) FROM educ_recovery_quarantine WHERE subject_id=?');$s->execute([$subject]);
         ledgerCheck((int)$s->fetchColumn()===1);
+        ledgerReject(LogicException::class,fn()=>$restore->restore($subject,'ledger-fixture',$archive,$archiveKey,$storageKey));
+        putenv('FISKAI_CIS_RECOVERY_MODE=1');
         ledgerReject(DomainException::class,fn()=>$restore->restore($subject,'ledger-fixture',$archive,$archiveKey,$storageKey));
+        // A rejected repeat must leave both the immutable document and its quarantine intact.
+        ledgerCheck($restored->read($subject,$doc,$storageKey)===$entry);
+        $s->execute([$subject]);ledgerCheck((int)$s->fetchColumn()===1);
         echo "EDUC archive v2: document chain, exact request, quarantine and non-overwriting restore passed.\n";
     }finally{
         $target=null;
