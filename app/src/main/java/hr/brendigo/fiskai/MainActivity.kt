@@ -114,10 +114,10 @@ private fun FiskApp(store: DraftStore, directory: DirectoryStore, businessStore:
             Text("Fisk", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 26.sp)
             Text("AI", color = Color(0xFF48A3FF), fontWeight = FontWeight.Bold, fontSize = 26.sp)
             if(BuildConfig.DEMO_MODE) Text(" DEMO",color=Color.White,fontWeight=FontWeight.Bold,fontSize=12.sp)
-            Spacer(Modifier.weight(1f)); Text(if(page == "Novi") "Novi dokument" else page, color = Color.White)
+            Spacer(Modifier.weight(1f)); Text(if(page == "Novi") "Novi dokument" else if(page == "eRačuni") "Ulazni eRačuni" else page, color = Color.White)
         } },
         bottomBar = { NavigationBar(containerColor = Color.White) {
-            listOf("Početna" to "⌂", "Računi" to "≡", "Novi" to "+", "Ponude" to "▤", "Više" to "···").forEach { (label, glyph) ->
+            listOf("Početna" to "⌂", "Računi" to "≡", "Novi" to "+", "eRačuni" to "✉", "Više" to "···").forEach { (label, glyph) ->
                 NavigationBarItem(selected = page == label, enabled = !backupBusy, onClick = { selected = null; error = ""; if(label == "Novi") create("Račun") else page = label }, icon = { Text(glyph, fontSize = 23.sp) }, label = { Text(label, fontSize = 11.sp) })
             }
         } }
@@ -173,6 +173,7 @@ private fun FiskApp(store: DraftStore, directory: DirectoryStore, businessStore:
                     if(filtered.isEmpty()) Text("Nema odgovarajućih nacrta.")
                     filtered.reversed().forEach { DraftRow(it) { selected = it } }
                 }
+                page == "eRačuni" -> IncomingInvoiceScreen(business,items,{selected=it},{backupBusy=it})
                 page == "Kupci" || page == "Dobavljači" -> ContactScreen(
                     supplier = page == "Dobavljači", contacts = contacts,
                     onSave = { next -> directory.saveContacts(next).also { if(it) contacts = next } }
@@ -196,10 +197,10 @@ private fun FiskApp(store: DraftStore, directory: DirectoryStore, businessStore:
                 }
                 else -> {
                     Text("Više", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    listOf("Kupci", "Dobavljači", "Proizvodi i usluge", "Poslovni subjekt", "Poslovni prostori", "Naplatni uređaji", "Operateri", "Certifikati", "Test fiskalizacije", "DEMO računi", "POS blagajna", "Skladište", "Platni kodovi", "Sigurnosna kopija").forEach { destination ->
+                    listOf("Ponude", "Kupci", "Dobavljači", "Proizvodi i usluge", "Poslovni subjekt", "Poslovni prostori", "Naplatni uređaji", "Operateri", "Certifikati", "Test fiskalizacije", "DEMO računi", "POS blagajna", "Skladište", "Platni kodovi", "Sigurnosna kopija").forEach { destination ->
                         OutlinedButton(onClick = { page = destination }, modifier = Modifier.fillMaxWidth()) { Text(destination) }
                     }
-                    Panel { Text("Lokalna pohrana"); Text("Lokalni zapisi zaštićeni su ključem ovog uređaja. Fiskalizacija i eRačuni još nisu dostupni.") }
+                    Panel { Text("Lokalna pohrana"); Text("Lokalni zapisi zaštićeni su ključem ovog uređaja. Fiskalno slanje i povezivanje s informacijskim posrednikom još nisu dostupni.") }
                     Panel { Text("FiskAI"); Text("Računi i ponude") }
                 }
             }

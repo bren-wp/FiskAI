@@ -32,7 +32,8 @@ internal class SecureRecords(
             BackupRecord("fiskai_directory","contacts","[]"),
             BackupRecord("fiskai_directory","products","[]"),
             BackupRecord("fiskai_business","profile","{}"),
-            BackupRecord("fiskai_fiscal_setup","settings","{}")
+            BackupRecord("fiskai_fiscal_setup","settings","{}"),
+            BackupRecord("fiskai_incoming","invoices","[]")
         )
 
         internal fun exportWorkspace(context:Context,database:RecordDatabase=RecordDatabase.shared(context)):String = synchronized(lock) {
@@ -65,6 +66,8 @@ internal class SecureRecords(
             val ledger=LedgerBackup(context,database)
             val journals=if(version>=2)root.getJSONObject("journals").also(ledger::validate) else null
             val payload=root.getJSONObject("records")
+            // Earlier backups lack the incoming-invoice collection.
+            if(!payload.has("fiskai_incoming/invoices"))payload.put("fiskai_incoming/invoices",org.json.JSONArray())
             require(payload.keys().asSequence().toSet()==backupRecords.map { it.id }.toSet())
             val incoming=backupRecords.map { item ->
                 val value=payload.get(item.id)

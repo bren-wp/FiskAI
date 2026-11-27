@@ -4,6 +4,9 @@ import org.json.JSONObject
 
 internal object WorkspaceValidation {
     fun validate(records:JSONObject) {
+        val incoming=records.getJSONArray("fiskai_incoming/invoices")
+        require(incoming.toString().toByteArray(Charsets.UTF_8).size<=IncomingInvoiceStore.MAX_STORE)
+        IncomingInvoiceStore.decode(incoming)
         val drafts=DraftStore.decode(records.getJSONArray("fiskai_drafts/drafts"))
         val contacts=DirectoryStore.decodeContacts(records.getJSONArray("fiskai_directory/contacts"))
         val products=DirectoryStore.decodeProducts(records.getJSONArray("fiskai_directory/products"))
