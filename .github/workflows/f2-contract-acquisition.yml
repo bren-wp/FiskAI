@@ -5,6 +5,8 @@ on:
       - '.github/workflows/f2-contract-acquisition.yml'
       - 'scripts/verify-f2-bundle.py'
       - 'scripts/test-f2-bundle.py'
+      - 'scripts/accept-f2-contracts.py'
+      - 'scripts/test-f2-contract-acceptance.py'
   workflow_dispatch:
 permissions:
   contents: read
@@ -17,6 +19,7 @@ jobs:
         with:
           persist-credentials: false
       - run: python3 scripts/test-f2-bundle.py
+      - run: python3 scripts/test-f2-contract-acceptance.py
       - name: Acquire original public contracts without executing them
         shell: bash
         run: |
