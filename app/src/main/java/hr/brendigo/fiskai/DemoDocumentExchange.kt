@@ -10,7 +10,7 @@ import org.json.JSONObject
  */
 internal object DemoDocumentExchange {
     private const val LIMIT=1024*1024
-    fun export(context:Context,db:RecordDatabase,owner:String,subject:String):String=SecureRecords.withRecordLock {
+    fun export(context:Context,db:RecordDatabase,owner:String,subject:String,allowEmpty:Boolean=false):String=SecureRecords.withRecordLock {
         check(BuildConfig.DEMO_MODE)
         require(validOib(owner));DemoSyncClient.identity(subject)
         val sql=db.writableDatabase
@@ -37,7 +37,7 @@ internal object DemoDocumentExchange {
                     rows.put(JSONObject().put("documentId",id).put("digest",c.getString(8)).put("snapshot",plain))
                 }
             }
-            require(rows.length()>0)
+            require(allowEmpty||rows.length()>0)
             val enrollment=DemoDeviceIdentity.enrollment()
             val body=JSONObject().put("protocol","FISKAI-DEMO-DOCUMENTS-V1").put("subjectId",subject)
                 .put("ownerOib",owner).put("keySha256",enrollment.fingerprint).put("documents",rows)
