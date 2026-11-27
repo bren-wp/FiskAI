@@ -45,6 +45,33 @@ final class F2KpdRelease {
             $db->commit();return $revision;
         }catch(Throwable $e){if($db->inTransaction())$db->rollBack();throw $e;}
     }
+    /** Ordinary invoice lines only. No classification guessing or exemptions. */
+    public static function checkLines(string $xml,array $release):array {
+        if(strlen($xml)>1048576||str_contains($xml,'<!')||str_contains($xml,"\0")||!preg_match('//u',$xml))
+            throw new InvalidArgumentException('Invalid invoice XML.');
+        $doc=new DOMDocument();
+        if(!$doc->loadXML($xml,LIBXML_NONET)||$doc->doctype!==null)throw new InvalidArgumentException('Invalid invoice XML.');
+        $xp=new DOMXPath($doc);
+        $xp->registerNamespace('i','urn:oasis:names:specification:ubl:schema:xsd:Invoice-2');
+        $xp->registerNamespace('a','urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2');
+        $xp->registerNamespace('b','urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2');
+        $type=$xp->query('/i:Invoice/b:InvoiceTypeCode');
+        if($type->length!==1||trim($type->item(0)->textContent)!=='380')throw new DomainException('Only ordinary invoice type 380 supported.');
+        $lines=$xp->query('/i:Invoice/a:InvoiceLine');
+        if($lines->length<1||$lines->length>1000)throw new DomainException('Unsupported line count.');
+        $codes=[];
+        foreach($lines as $line){
+            $nodes=$xp->query('a:Item/a:CommodityClassification/b:ItemClassificationCode[@listID="CG"]',$line);
+            if($nodes->length!==1)throw new DomainException('Exactly one KPD classification per ordinary line required.');
+            $node=$nodes->item(0);
+            foreach($node->childNodes as $child)if($child instanceof DOMElement)throw new DomainException('Invalid KPD field.');
+            $code=trim($node->textContent);
+            if(!preg_match('/\A[0-9]{2}\.[0-9]{2}\.[0-9]{2}\z/D',$code)||!isset($release['codes'][$code]))
+                throw new DomainException('KPD code absent from approved release.');
+            $codes[]=$code;
+        }
+        return $codes;
+    }
     /** External approved source hash is independent of database contents. */
     public static function verified(PDO $db,string $date,string $approvedSha,string $approvedCatalogSha):array {
         $revision=self::revision($date);
