@@ -122,12 +122,13 @@ internal fun ReceiptScreen(page:String,business:BusinessProfile,onBusy:(Boolean)
                 if(choice!=null){
                     Text("Račun "+choice.label,fontWeight=FontWeight.Bold)
                     Text(choice.customer);Text(choice.date)
+                    Text("Preostalo za naplatu: "+euro(ReceiptRules.amount(choice.remainingCents)))
                     if(choices.size>1)Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){
                         TextButton(enabled=!busy&&choiceIndex>0,onClick={choiceIndex--}){Text("Prethodni")}
                         TextButton(enabled=!busy&&choiceIndex<choices.lastIndex,onClick={choiceIndex++}){Text("Sljedeći")}
                     }
                     if(choices.size>1)Text((choiceIndex+1).toString()+" / "+choices.size)
-                }else Text("Nema odgovarajućeg nepovezanog računa među posljednjih 100 dostupnih DEMO računa.")
+                }else Text("Nema odgovarajućeg nepovezanog računa među posljednjih 100 DEMO računa.")
             }
         },confirmButton={
             if(choice!=null&&!paymentSelection.linked)TextButton(enabled=!busy,onClick={
