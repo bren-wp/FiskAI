@@ -10,7 +10,7 @@ foreach(explode(';',$sql) as $statement){if(trim($statement)!=='')$db->exec($sta
 // Exercise adoption of an existing installation without recreating existing tables.
 $existingSite='existing_'.bin2hex(random_bytes(6));
 $stmt=$db->prepare("INSERT INTO price_heads(site_key,kind) VALUES (?,'USLUGE')");$stmt->execute([$existingSite]);
-check(SchemaMigrator::apply($db,__DIR__.'/../database')===['001.sql','002_fiscal_event_outbox.sql','003_cis_educ_response_evidence.sql','004_demo_sync.sql','005_demo_device_proof.sql','006_cis_educ_dispatch.sql']);
+check(SchemaMigrator::apply($db,__DIR__.'/../database')===['001.sql','002_fiscal_event_outbox.sql','003_cis_educ_response_evidence.sql','004_demo_sync.sql','005_demo_device_proof.sql','006_cis_educ_dispatch.sql','007_cis_educ_audit.sql']);
 $stmt=$db->prepare("SELECT COUNT(*) FROM price_heads WHERE site_key=?");$stmt->execute([$existingSite]);check((int)$stmt->fetchColumn()===1);
 check(SchemaMigrator::apply($db,__DIR__.'/../database')===[]);
 $site='test_'.bin2hex(random_bytes(6));
