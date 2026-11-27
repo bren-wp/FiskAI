@@ -126,6 +126,9 @@ final class CisEducDispatch {
     /** Operator-controlled EDUC send. Failure after reservation is always ambiguous. */
     public function dispatchAuthorized(string $subject,string $message,OpenSSLCertificate $signer,
         OpenSSLCertificate $trusted,string $schemaDir,string $storageKey):string {
+        $s=$this->db->prepare('SELECT subject_id FROM educ_recovery_quarantine WHERE subject_id=?');
+        $s->execute([$subject]);
+        if($s->fetchColumn()!==false)throw new LogicException('Restored subject requires independent reconciliation; live dispatch blocked.');
         $r=$this->row($subject,$message);
         CisEducHttpsTransport::authorize($subject,$signer,$trusted,$r['signer_sha256'],$r['trust_sha256']);
         $entry=(new EducBusinessLedger($this->db))->read($subject,$r['document_id'],$storageKey);
