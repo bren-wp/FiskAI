@@ -12,7 +12,7 @@ internal object LegalCompliance {
 
     // ISO date of the legally relevant event, not the current device clock.
     // Avoid java.time dependency on API 24/25.
-    fun evaluate(date: String, subject: Subject, scope: Scope): Decision {
+    internal fun validateDate(date: String): Int {
         require(date.matches(Regex("[0-9]{4}-[0-9]{2}-[0-9]{2}")))
         val year = date.substring(0, 4).toInt()
         val month = date.substring(5, 7).toInt()
@@ -21,6 +21,11 @@ internal object LegalCompliance {
         val leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)
         val days = when (month) { 2 -> if (leap) 29 else 28; 4, 6, 9, 11 -> 30; else -> 31 }
         require(day in 1..days)
+        return year
+    }
+
+    fun evaluate(date: String, subject: Subject, scope: Scope): Decision {
+        val year = validateDate(date)
         val rule = LegalRuleCatalog.rules[year]
         val version = rule?.version
         if (rule == null || scope != Scope.STANDARD_DOMESTIC_B2B || subject == Subject.UNKNOWN) {
