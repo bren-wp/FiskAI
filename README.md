@@ -2,7 +2,7 @@
 
 **Računi, ponude i poslovanje na jednom mjestu.**
 
-FiskAI je hrvatska poslovna platforma u razvoju. Nativna Android aplikacija omogućuje lokalno sastavljanje nacrta računa i ponuda, evidenciju kupaca i artikala te pregled poslovnih dokumenata.
+FiskAI je hrvatska poslovna platforma u razvoju. Nativna Android aplikacija omogućuje lokalno sastavljanje nacrta računa i ponuda, lokalni imenik kupaca i dobavljača te katalog proizvoda i usluga te pregled poslovnih dokumenata.
 
 ## Dostupnost
 

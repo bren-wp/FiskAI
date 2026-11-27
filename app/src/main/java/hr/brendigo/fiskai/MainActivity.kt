@@ -23,19 +23,21 @@ import java.util.Locale
 private val Navy = Color(0xFF0B1F3B)
 private val Blue = Color(0xFF005BEA)
 private val Surface = Color(0xFFF4F7FB)
-private fun euro(value: BigDecimal) = NumberFormat.getCurrencyInstance(Locale.forLanguageTag("hr-HR")).format(value)
+internal fun euro(value: BigDecimal) = NumberFormat.getCurrencyInstance(Locale.forLanguageTag("hr-HR")).format(value)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val store = DraftStore(this)
-        setContent { MaterialTheme(colorScheme = lightColorScheme(primary = Blue, background = Surface, surface = Color.White, onSurface = Navy)) { FiskApp(store) } }
+        setContent { MaterialTheme(colorScheme = lightColorScheme(primary = Blue, background = Surface, surface = Color.White, onSurface = Navy)) { FiskApp(store, DirectoryStore(this)) } }
     }
 }
 
 @Composable
-private fun FiskApp(store: DraftStore) {
+private fun FiskApp(store: DraftStore, directory: DirectoryStore) {
     var items by remember { mutableStateOf(store.read()) }
+    var contacts by remember { mutableStateOf(directory.contacts()) }
+    var products by remember { mutableStateOf(directory.products()) }
     var page by remember { mutableStateOf("Početna") }
     var kind by remember { mutableStateOf("Račun") }
     var selected by remember { mutableStateOf<Draft?>(null) }
@@ -64,7 +66,7 @@ private fun FiskApp(store: DraftStore) {
                     Panel { Text("Ukupno", fontWeight = FontWeight.Bold); Text(euro(draft.total), fontSize = 26.sp) }
                     Text("Dokument nije izdan niti fiskaliziran.")
                 }
-                page == "Novi" -> key(kind) { DraftForm(kind, error) { draft ->
+                page == "Novi" -> key(kind) { DraftForm(kind, error, contacts.filter { !it.supplier }, products) { draft ->
                     val updated = items + draft
                     if(store.save(updated)) { items = updated; page = if(kind == "Račun") "Računi" else "Ponude"; error = "" } else error = "Spremanje nije uspjelo."
                 } }
@@ -89,8 +91,18 @@ private fun FiskApp(store: DraftStore) {
                     if(filtered.isEmpty()) Text("Nema odgovarajućih nacrta.")
                     filtered.reversed().forEach { DraftRow(it) { selected = it } }
                 }
+                page == "Kupci" || page == "Dobavljači" -> ContactScreen(
+                    supplier = page == "Dobavljači", contacts = contacts,
+                    onSave = { next -> directory.saveContacts(next).also { if(it) contacts = next } }
+                )
+                page == "Proizvodi i usluge" -> ProductScreen(products) { next ->
+                    directory.saveProducts(next).also { if(it) products = next }
+                }
                 else -> {
-                    Text("Postavke", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                    Text("Više", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                    listOf("Kupci", "Dobavljači", "Proizvodi i usluge").forEach { destination ->
+                        OutlinedButton(onClick = { page = destination }, modifier = Modifier.fillMaxWidth()) { Text(destination) }
+                    }
                     Panel { Text("Lokalna pohrana"); Text("Nacrti se čuvaju na ovom uređaju. Fiskalizacija i eRačuni još nisu dostupni.") }
                     Panel { Text("FiskAI"); Text("Računi i ponude") }
                 }
@@ -100,7 +112,7 @@ private fun FiskApp(store: DraftStore) {
 }
 
 @Composable
-private fun Panel(content: @Composable ColumnScope.() -> Unit) {
+internal fun Panel(content: @Composable ColumnScope.() -> Unit) {
     Card(shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = Color.White), modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp), content = content)
     }
@@ -115,7 +127,7 @@ private fun DraftRow(draft: Draft, open: () -> Unit) {
     }
 }
 @Composable
-private fun DraftForm(kind: String, saveError: String, onSave: (Draft) -> Unit) {
+private fun DraftForm(kind: String, saveError: String, contacts: List<Contact>, products: List<Product>, onSave: (Draft) -> Unit) {
     var customer by remember { mutableStateOf("") }
     var oib by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
@@ -127,6 +139,7 @@ private fun DraftForm(kind: String, saveError: String, onSave: (Draft) -> Unit) 
     Text(if(kind == "Račun") "Novi račun" else "Nova ponuda", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
     Panel {
         Text("Kupac", fontWeight = FontWeight.Bold)
+        if(contacts.isNotEmpty()) DirectoryPicker("Odaberi kupca", contacts.map { it.name }) { index -> customer = contacts[index].name; oib = contacts[index].oib }
         OutlinedTextField(customer, { customer = it }, label = { Text("Naziv kupca") }, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(oib, { oib = it }, label = { Text("OIB (ako je primjenjivo)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
     }
@@ -136,6 +149,7 @@ private fun DraftForm(kind: String, saveError: String, onSave: (Draft) -> Unit) 
             Column(Modifier.weight(1f)) { Text(line.description); Text(euro(line.total)) }
             TextButton(onClick = { lines = lines.filterIndexed { i, _ -> i != index } }) { Text("Ukloni") }
         } }
+        if(products.isNotEmpty()) DirectoryPicker("Odaberi artikl", products.map { it.name }) { index -> val product = products[index]; description = product.name; price = product.price.toPlainString(); vat = product.vat.toPlainString() }
         OutlinedTextField(description, { description = it }, label = { Text("Naziv proizvoda ili usluge") }, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(quantity, { quantity = it }, label = { Text("Količina") }, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(price, { price = it }, label = { Text("Jedinična cijena bez PDV-a") }, modifier = Modifier.fillMaxWidth())
