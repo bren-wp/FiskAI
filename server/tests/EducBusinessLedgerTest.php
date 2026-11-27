@@ -118,6 +118,13 @@ ledgerCheck($ledger->read($subject,$partialOriginal['documentId'],$storageKey)==
 $extra=$partial;$extra['documentId']='a2000000-0000-4000-8000-000000000012';$extra['messageId']='a3000000-0000-4000-8000-000000000012';
 ledgerReject(DomainException::class,fn()=>$ledger->issue($subject,$extra,$storageKey));
 ledgerReject(LogicException::class,fn()=>EducBusinessLedger::request($p1['document'],$key));
+require_once __DIR__.'/../src/EducAccountingPreview.php';
+$accounting=(new EducAccountingPreview($db))->period($subject,'2026-11-27','2026-11-27',$storageKey);
+ledgerCheck($accounting['documents']===8&&$accounting['invoices']===5&&$accounting['credits']===3);
+ledgerCheck($accounting['totalCents']===1250+126+1250);
+ledgerCheck($accounting['checkpoint']['position']===10);
+$empty=(new EducAccountingPreview($db))->period($subject,'2026-11-28','2026-11-30',$storageKey);
+ledgerCheck($empty['documents']===0&&$empty['totalCents']===0);
 $head=$ledger->checkpoint($subject,$storageKey);
 ledgerCheck($head['position']===10&&$head['subject']===$subject);
 echo "EDUC immutable business ledger, document chain and exact signed request binding passed.\n";
