@@ -1,0 +1,53 @@
+// Invoked only by release CI. Resolve the actual runtime dependency graph of all APK/AAB variants.
+import groovy.json.JsonOutput
+import org.gradle.api.artifacts.component.ModuleComponentIdentifier
+import org.gradle.api.artifacts.result.ResolvedDependencyResult
+
+gradle.projectsEvaluated {
+    def app = gradle.rootProject.project(':app')
+    app.tasks.register('fiskaiRuntimeSbom') {
+        doLast {
+            def version = app.android.defaultConfig.versionName
+            def rootRef = "pkg:generic/fiskai@" + version
+            def components = new TreeMap<String, Map>()
+            def edges = new TreeMap<String, Set<String>>()
+            edges[rootRef] = new TreeSet<String>()
+            def ref = { id ->
+                if (!(id instanceof ModuleComponentIdentifier)) return rootRef
+                def encode = { value -> java.net.URLEncoder.encode(value.toString(), 'UTF-8').replace('+','%20') }
+                def purl = "pkg:maven/" + encode(id.group) + "/" + encode(id.module) + "@" + encode(id.version)
+                if (!components.containsKey(purl)) {
+                    components[purl] = [type:'library', group:id.group, name:id.module, version:id.version, purl:purl, 'bom-ref':purl]
+                    edges[purl] = new TreeSet<String>()
+                }
+                return purl
+            }
+            ['debugRuntimeClasspath','demoRuntimeClasspath','releaseRuntimeClasspath'].each { name ->
+                def configuration = app.configurations.getByName(name)
+                // Force actual artifact resolution, not only declared dependency names.
+                configuration.incoming.artifacts.artifactFiles.files
+                def graph = configuration.incoming.resolutionResult
+                graph.allComponents.each { component -> ref(component.id) }
+                graph.allDependencies.each { dep ->
+                    if (!(dep instanceof ResolvedDependencyResult)) {
+                        throw new GradleException("Unresolved dependency in " + name)
+                    }
+                    def from = ref(dep.from.id)
+                    def to = ref(dep.selected.id)
+                    if (from != to) edges[from].add(to)
+                }
+            }
+            if (components.isEmpty()) throw new GradleException('Empty Android SBOM')
+            def document = [
+                bomFormat:'CycloneDX', specVersion:'1.6', version:1,
+                metadata:[component:[type:'application',name:'FiskAI',version:version,'bom-ref':rootRef],
+                          properties:[[name:'fiskai:scope',value:'Android resolved debug, demo and release runtime graphs; not a complete server or build-tool inventory']]],
+                components:components.values().toList(),
+                dependencies:edges.collect { key, values -> ['ref':key,dependsOn:values.toList()] }
+            ]
+            def target = new File(gradle.rootProject.projectDir,'dist/FiskAI-android.cdx.json')
+            target.parentFile.mkdirs()
+            target.setText(JsonOutput.prettyPrint(JsonOutput.toJson(document))+'\n','UTF-8')
+        }
+    }
+}
