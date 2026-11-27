@@ -1,0 +1,21 @@
+CREATE TABLE IF NOT EXISTS fiscal_event_outbox (
+ environment ENUM('EDUC','PROD') NOT NULL,
+ subject_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ event_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ document_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ event_type VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ event_date DATE NOT NULL,
+ evidence_sha256 CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ rule_version VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ deadline_kind VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ deadline_date DATE NULL,
+ working_days TINYINT UNSIGNED NULL,
+ state ENUM('PREPARED','CLAIMED','UNCERTAIN') NOT NULL DEFAULT 'PREPARED',
+ claim_token CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NULL,
+ created_at DATETIME(6) NOT NULL,
+ claimed_at DATETIME(6) NULL,
+ updated_at DATETIME(6) NOT NULL,
+ PRIMARY KEY(environment,subject_id,event_id),
+ KEY document_lookup(environment,subject_id,document_id),
+ KEY recovery_lookup(environment,subject_id,state,claimed_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
