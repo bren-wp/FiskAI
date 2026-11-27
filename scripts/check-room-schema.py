@@ -8,12 +8,12 @@ root = pathlib.Path(sys.argv[1])
 variants = ("compileDebugJavaWithJavac", "compileDemoJavaWithJavac", "compileReleaseJavaWithJavac")
 documents = []
 for variant in variants:
-    path = root / variant / "hr.brendigo.fiskai.room.FiscalRoomDatabase" / "6.json"
+    path = root / variant / "hr.brendigo.fiskai.room.FiscalRoomDatabase" / "7.json"
     document = json.loads(path.read_text(encoding="utf-8"))
     db = document["database"]
-    assert db["version"] == 6, f"Unexpected schema version: {variant}"
+    assert db["version"] == 7, f"Unexpected schema version: {variant}"
     entities = {e["tableName"]: e for e in db["entities"]}
-    assert set(entities) == {"fiscal_document", "fiscal_outbox"}
+    assert set(entities) == {"fiscal_document", "fiscal_outbox", "incoming_invoice"}
     assert entities["fiscal_outbox"]["foreignKeys"], "Missing document reference"
     assert len(entities["fiscal_document"]["indices"]) == 2, "Missing uniqueness indices"
     documents.append(document)

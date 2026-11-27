@@ -90,12 +90,16 @@ internal object IncomingUbl {
         return IncomingInvoice(key,supplierName,supplierOib,customerOib,number,date,amount,sha(bytes),"RECEIVED",Base64.encodeToString(bytes,Base64.NO_WRAP))
     }
 }
-internal class IncomingInvoiceStore(context:Context,db:RecordDatabase=RecordDatabase.shared(context)) {
+internal class IncomingInvoiceStore(
+    private val context:Context,
+    private val db:RecordDatabase=RecordDatabase.shared(context),
+    private val room:hr.brendigo.fiskai.room.FiscalRoomDatabase=hr.brendigo.fiskai.room.FiscalRoomDatabase.shared(context)
+) {
     private val secure=SecureRecords(context,"fiskai_incoming",db)
     companion object {
         const val MAX_STORE=4*1024*1024
         fun decode(array:JSONArray):List<IncomingInvoice>{
-            require(array.length()<=1000)
+            require(array.length()<=1000&&array.toString().toByteArray(Charsets.UTF_8).size<=MAX_STORE)
             val rows=List(array.length()){i->
                 val j=array.getJSONObject(i)
                 val parsed=IncomingUbl.parse(Base64.decode(j.getString("xml"),Base64.NO_WRAP),j.getString("buyerOib"))
@@ -107,34 +111,89 @@ internal class IncomingInvoiceStore(context:Context,db:RecordDatabase=RecordData
             require(rows.map{it.key}.distinct().size==rows.size)
             return rows
         }
-        private fun encode(rows:List<IncomingInvoice>)=JSONArray().apply{rows.forEach{
-            put(JSONObject().put("key",it.key).put("buyerOib",it.buyerOib).put("digest",it.digest).put("status",it.status).put("xml",it.xml))
-        }}
+        private fun encodeOne(row:IncomingInvoice)=JSONObject().put("key",row.key).put("buyerOib",row.buyerOib)
+            .put("digest",row.digest).put("status",row.status).put("xml",row.xml)
+        fun encode(rows:List<IncomingInvoice>)=JSONArray().apply{rows.forEach{put(encodeOne(it))}}
+        private fun active(sql:android.database.sqlite.SQLiteDatabase)=sql.rawQuery("SELECT 1 FROM incoming_cutover WHERE id=1",null).use{it.moveToFirst()}
+        private fun readSql(context:Context,db:RecordDatabase,sql:android.database.sqlite.SQLiteDatabase):List<IncomingInvoice>{
+            val secure=SecureRecords(context,"fiskai_incoming",db)
+            val array=JSONArray()
+            sql.rawQuery("SELECT id,payload FROM incoming_invoice ORDER BY id",null).use{c->
+                while(c.moveToNext()){
+                    require(array.length()<1000)
+                    val value=JSONObject(secure.openSnapshot(c.getString(0),c.getString(1)))
+                    require(value.getString("key")==c.getString(0));array.put(value)
+                }
+            }
+            return decode(array)
+        }
+        // Keep the old ciphertext as a recovery source; the marker makes the new rows authoritative.
+        fun ensure(context:Context,db:RecordDatabase)=SecureRecords.withRecordLock {
+            val sql=db.writableDatabase
+            if(!active(sql)){
+                val legacy=SecureRecords(context,"fiskai_incoming",db).getString("invoices","[]")
+                val rows=decode(JSONArray(legacy))
+                sql.beginTransaction()
+                try{
+                    if(!active(sql)){
+                        require(readSql(context,db,sql).isEmpty())
+                        populate(context,db,sql,rows)
+                    }
+                    sql.setTransactionSuccessful()
+                }finally{sql.endTransaction()}
+            }
+        }
+        private fun populate(context:Context,db:RecordDatabase,sql:android.database.sqlite.SQLiteDatabase,rows:List<IncomingInvoice>){
+            val secure=SecureRecords(context,"fiskai_incoming",db)
+            require(readSql(context,db,sql).isEmpty())
+            for(row in rows){
+                val values=android.content.ContentValues().apply{
+                    put("id",row.key);put("payload",secure.sealSnapshot(row.key,encodeOne(row).toString()))
+                }
+                sql.insertOrThrow("incoming_invoice",null,values)
+            }
+            sql.execSQL("INSERT OR IGNORE INTO incoming_cutover(id) VALUES(1)")
+        }
+        fun exportArray(context:Context,db:RecordDatabase):JSONArray {
+            ensure(context,db)
+            return encode(readSql(context,db,db.readableDatabase))
+        }
+        fun restoreArray(context:Context,db:RecordDatabase,sql:android.database.sqlite.SQLiteDatabase,array:JSONArray){
+            populate(context,db,sql,decode(array))
+        }
+    }
+    private fun ready(){ensure(context,db);check(room.openHelper.databaseName==db.databaseName)}
+    private fun fromRow(row:hr.brendigo.fiskai.room.IncomingInvoiceRow):IncomingInvoice {
+        val j=JSONObject(secure.openSnapshot(row.id,row.payload))
+        require(j.getString("key")==row.id)
+        return decode(JSONArray().put(j)).single()
     }
     fun read():List<IncomingInvoice> = SecureRecords.withRecordLock {
-        val data=secure.getString("invoices","[]")
-        require(data.toByteArray(Charsets.UTF_8).size<=MAX_STORE)
-        decode(JSONArray(data))
-    }
-    private fun save(rows:List<IncomingInvoice>) {
-        val json=encode(rows).toString()
-        require(rows.size<=1000&&json.toByteArray(Charsets.UTF_8).size<=MAX_STORE)
-        check(secure.write("invoices",json))
+        ready()
+        room.incoming().all().map(::fromRow)
     }
     fun import(bytes:ByteArray,buyer:String):Boolean=SecureRecords.withRecordLock{
         val candidate=IncomingUbl.parse(bytes,buyer)
-        val rows=read()
-        val existing=rows.firstOrNull{it.key==candidate.key}
+        ready()
+        val dao=room.incoming()
+        val existing=dao.find(candidate.key)
         if(existing!=null){
-            require(existing.digest==candidate.digest){"Conflicting invoice identity"}
+            require(fromRow(existing).digest==candidate.digest){"Conflicting invoice identity"}
             return@withRecordLock false
         }
-        save(rows+candidate);true
+        val rows=dao.all().map(::fromRow)+candidate
+        require(rows.size<=1000&&encode(rows).toString().toByteArray(Charsets.UTF_8).size<=MAX_STORE)
+        dao.insert(hr.brendigo.fiskai.room.IncomingInvoiceRow().apply{
+            id=candidate.key;payload=secure.sealSnapshot(id,encodeOne(candidate).toString())
+        })
+        true
     }
     fun review(key:String,state:String)=SecureRecords.withRecordLock{
         require(state in setOf("RECEIVED","REVIEW","REJECTED"))
-        val rows=read()
-        require(rows.any{it.key==key})
-        save(rows.map{if(it.key==key)it.copy(status=state)else it})
+        ready()
+        val dao=room.incoming()
+        val row=requireNotNull(dao.find(key))
+        val next=fromRow(row).copy(status=state)
+        check(dao.update(key,row.payload,secure.sealSnapshot(key,encodeOne(next).toString()))==1)
     }
 }

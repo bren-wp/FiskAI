@@ -39,7 +39,7 @@ internal class SecureRecords(
         internal fun exportWorkspace(context:Context,database:RecordDatabase=RecordDatabase.shared(context)):String = synchronized(lock) {
             val records=org.json.JSONObject()
             for(item in backupRecords) {
-                val value=SecureRecords(context,item.namespace,database).getString(item.name,item.empty)
+                val value=if(item.namespace=="fiskai_incoming")IncomingInvoiceStore.exportArray(context,database).toString() else SecureRecords(context,item.namespace,database).getString(item.name,item.empty)
                 records.put(item.id,org.json.JSONTokener(value).nextValue())
             }
             val sql=database.writableDatabase
@@ -80,7 +80,10 @@ internal class SecureRecords(
             // Validate imported domain objects with the same decoders used by live storage.
             WorkspaceValidation.validate(payload)
             // Migrate old preferences first, so an unmigrated existing record cannot be overwritten.
-            for((item,target,_) in incoming) require(target.getString(item.name,item.empty)==item.empty)
+            for((item,target,_) in incoming) {
+                if(item.namespace=="fiskai_incoming")require(IncomingInvoiceStore.exportArray(context,database).length()==0)
+                else require(target.getString(item.name,item.empty)==item.empty)
+            }
             val certificate=SecureRecords(context,"fiskai_test_certificate",database)
             require(certificate.getString("credential","{}")=="{}")
             val sealed=incoming.map { (item,target,encoded) -> item to target.encrypt(item.name,encoded) }
@@ -94,7 +97,8 @@ internal class SecureRecords(
                 sql.query("records",arrayOf("namespace","record_key"),null,null,null,null,null).use { cursor ->
                     while(cursor.moveToNext()) require(backupRecords.any { it.namespace==cursor.getString(0)&&it.name==cursor.getString(1) })
                 }
-                for((item,encrypted) in sealed) database.write(item.namespace,item.name,encrypted)
+                for((item,encrypted) in sealed) if(item.namespace!="fiskai_incoming")database.write(item.namespace,item.name,encrypted)
+                IncomingInvoiceStore.restoreArray(context,database,sql,payload.getJSONArray("fiskai_incoming/invoices"))
                 if(journals!=null)ledger.restore(sql,journals)
                 if(version==3||FiscalCutover.active(sql))FiscalCutover.populate(context,database,sql,queues)
                 sql.setTransactionSuccessful()
