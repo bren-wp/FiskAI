@@ -14,12 +14,14 @@ final class LegalCompliance {
             || !in_array($scope,['STANDARD_DOMESTIC_B2B','UNRESOLVED'],true)) {
             throw new InvalidArgumentException('Invalid legal context.');
         }
-        $version = $date >= '2026-01-01' && $date < '2027-01-01' ? 'HR-F2-2026-v1'
-            : ($date >= '2027-01-01' && $date < '2028-01-01' ? 'HR-F2-2027-v1' : null);
+        static $rules = null;
+        $rules ??= require __DIR__.'/LegalRuleCatalog.php';
+        $rule = $rules[(int)substr($date,0,4)] ?? null;
+        $version = $rule['version'] ?? null;
         $issue = $receive = 'REVIEW_REQUIRED';
         if ($version !== null && $scope === 'STANDARD_DOMESTIC_B2B' && $subject !== 'UNKNOWN') {
             $receive = 'REQUIRED';
-            $issue = $subject === 'VAT' || $version === 'HR-F2-2027-v1'
+            $issue = ($subject === 'VAT' ? $rule['vatIssue'] : $rule['nonVatIssue'])
                 ? 'REQUIRED' : 'NOT_REQUIRED_BY_THIS_RULE';
         }
         return ['version'=>$version,'issue'=>$issue,'receive'=>$receive,
