@@ -1,0 +1,87 @@
+name: Official F2 contract candidates
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/f2-contract-acquisition.yml'
+      - 'scripts/verify-f2-bundle.py'
+      - 'scripts/test-f2-bundle.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  acquire:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - run: python3 scripts/test-f2-bundle.py
+      - name: Acquire original public contracts without executing them
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir f2-contract-candidates
+          fetch() {
+            local name="$1" id="$2" status
+            status="$(curl --fail --silent --show-error --proto '=https' --tlsv1.2 --connect-timeout 10 --max-time 60 --max-filesize 67108864 --output "f2-contract-candidates/$name" --write-out '%{http_code}' "https://porezna.gov.hr/fiskalizacija/api/dokumenti/$id")"
+            test "$status" = 200
+            test -s "f2-contract-candidates/$name"
+            test "$(wc -c < "f2-contract-candidates/$name")" -le 67108864
+          }
+          fetch validator-2026-03-13.zip 197
+          fetch ubl-2026-04-15.zip 198
+          fetch efiskalizacija-2026-02-12.zip 175
+          fetch eizvjestavanje-2026-02-12.zip 187
+          fetch f2-specification-2026-11-26.pdf 222
+          fetch as4-2025-10-07.pdf 140
+          fetch mps-2025-10-08.pdf 141
+          fetch ams-2025-10-09.pdf 142
+      - name: Inventory candidate bytes (not an approval)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib
+          import importlib.util
+          import json
+          from pathlib import Path
+          spec = importlib.util.spec_from_file_location("bundle", "scripts/verify-f2-bundle.py")
+          bundle = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(bundle)
+          root = Path("f2-contract-candidates")
+          records = {}
+          for kind, source in bundle.SOURCES.items():
+              path = root / (kind + ".zip")
+              with path.open("rb") as stream:
+                  digest = hashlib.file_digest(stream, "sha256").hexdigest()
+              # Calculated hash is ONLY a candidate inventory value, never a trusted pin.
+              records[path.name] = bundle.verify(path, kind, digest)
+          for name, id in {
+              "f2-specification-2026-11-26.pdf": 222,
+              "as4-2025-10-07.pdf": 140,
+              "mps-2025-10-08.pdf": 141,
+              "ams-2025-10-09.pdf": 142,
+          }.items():
+              with (root / name).open("rb") as stream:
+                  if stream.read(5) != b"%PDF-":
+                      raise ValueError("Unexpected PDF content")
+                  stream.seek(0)
+                  digest = hashlib.file_digest(stream, "sha256").hexdigest()
+              records[name] = {
+                  "source": f"https://porezna.gov.hr/fiskalizacija/api/dokumenti/{id}",
+                  "sha256": digest,
+              }
+          (root / "CANDIDATE-INVENTORY.json").write_text(json.dumps({
+              "status": "UNREVIEWED_CANDIDATE_ONLY",
+              "dispatchAuthorized": False,
+              "files": records,
+          }, indent=2) + "\n", encoding="utf-8")
+          PY
+      - uses: actions/upload-artifact@v6
+        with:
+          name: FiskAI-F2-originals-UNREVIEWED
+          path: f2-contract-candidates/
+          if-no-files-found: error
+          retention-days: 7
