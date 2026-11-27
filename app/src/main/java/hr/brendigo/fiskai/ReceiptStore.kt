@@ -87,6 +87,21 @@ internal class ReceiptStore(private val context:Context,private val db:RecordDat
         ready()
         PaymentPreparationStore.prepare(context,db,receiptId,documentId)
     }
+    fun demoSyncEvents(business:BusinessProfile):List<JSONObject> = SecureRecords.withRecordLock {
+        check(BuildConfig.DEMO_MODE)
+        require(validOib(business.oib))
+        ready()
+        val sql=db.writableDatabase
+        sql.beginTransaction()
+        try {
+            val (bank,events)=export(context,db,sql)
+            val ids=validate(bank,events).receipts.filter{it.owner==business.oib}.map{it.id}.toSet()
+            val prepared=PaymentPreparationStore.export(context,db,sql)
+            val result=(0 until prepared.length()).map{prepared.getJSONObject(it)}.filter{it.getString("receiptId") in ids}
+            sql.setTransactionSuccessful()
+            result
+        }finally{sql.endTransaction()}
+    }
     fun cash(business:BusinessProfile,reference:String,date:String,amount:String,note:String):Boolean=SecureRecords.withRecordLock {
         post(ReceiptRules.cash(business.oib,reference,date,ReceiptRules.cents(amount),note),read())
     }

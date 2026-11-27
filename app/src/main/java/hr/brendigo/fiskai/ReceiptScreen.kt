@@ -8,6 +8,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -30,6 +31,13 @@ internal fun ReceiptScreen(page:String,business:BusinessProfile,onBusy:(Boolean)
     var choiceIndex by remember{mutableStateOf(0)}
     var selected by remember{mutableStateOf<BankEvidence?>(null)}
     var note by remember{mutableStateOf("")}
+    var syncDialog by remember{mutableStateOf(false)}
+    var remoteDocuments by remember(business.oib){mutableStateOf<List<DemoDocumentJournal.Document>?>(null)}
+    var documentIndex by remember(business.oib){mutableStateOf(0)}
+    var syncUrl by remember{mutableStateOf("")}
+    var syncSubject by remember{mutableStateOf("")}
+    var syncToken by remember{mutableStateOf("")}
+    var enrollment by remember{mutableStateOf<DemoDeviceIdentity.Enrollment?>(null)}
     var manual by remember{mutableStateOf(false)}
     var reference by remember{mutableStateOf("")}
     var amount by remember{mutableStateOf("")}
@@ -52,6 +60,20 @@ internal fun ReceiptScreen(page:String,business:BusinessProfile,onBusy:(Boolean)
                 .onSuccess{paymentSelection=it;choiceIndex=0;paymentReceipt=row}
                 .onFailure{message="Odgovarajući DEMO računi nisu dostupni."}
         }finally{working(false)}}
+    }
+    var documentExportSubject by remember{mutableStateOf("")}
+    val documentExport=rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")){uri->
+        if(uri==null)working(false) else {
+            val subject=documentExportSubject;documentExportSubject=""
+            scope.launch{try{
+                withContext(Dispatchers.IO){runCatching{
+                    val envelope=DemoDocumentExchange.export(context,RecordDatabase.shared(context),business.oib,subject)
+                    val output=context.contentResolver.openOutputStream(uri,"wt")?:error("Missing destination")
+                    output.use{it.write(envelope.toByteArray(Charsets.UTF_8));it.flush()}
+                }}.onSuccess{message="Potpisani DEMO dokumenti izvezeni su za pregled."}
+                    .onFailure{message="Izvoz nije potvrđen. Provjerite dokumente i odredište."}
+            }finally{working(false)}}
+        }
     }
     val picker=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()){uri->
         if(uri==null)working(false) else perform{
@@ -92,6 +114,7 @@ internal fun ReceiptScreen(page:String,business:BusinessProfile,onBusy:(Boolean)
             Text("Gotovina: "+euro(ReceiptRules.amount(shown.filter{it.method=="CASH"}.sumOf{it.cents})))
             Text("Transakcijski račun: "+euro(ReceiptRules.amount(shown.filter{it.method=="BANK"}.sumOf{it.cents})))
         }
+        if(page=="Evidencija naplate"&&BuildConfig.DEMO_MODE)OutlinedButton(enabled=!busy&&ready,onClick={syncDialog=true;syncToken=""},modifier=Modifier.fillMaxWidth()){Text("Sinkroniziraj DEMO naplate")}
         if(page=="Evidencija naplate")Button(enabled=!busy&&ready,onClick={manual=true;note="";reference="";date=today;amount=""},modifier=Modifier.fillMaxWidth()){Text("Evidentiraj gotovinski primitak")}
         else Text("Radni pregled za pripremu KPR-a, nije službeni obrazac. Porezni tretman i korekcije potrebno je provjeriti.")
         shown.forEachIndexed{i,row->Panel{
@@ -136,6 +159,76 @@ internal fun ReceiptScreen(page:String,business:BusinessProfile,onBusy:(Boolean)
                 perform{store.prepareDemoPayment(row.id,choice.id);"Naplata je povezana s DEMO računom."}
             }){Text("Poveži")}
         },dismissButton={TextButton(enabled=!busy,onClick={paymentReceipt=null}){Text("Zatvori")}})
+    }
+    if(syncDialog)AlertDialog(onDismissRequest={if(!busy){syncDialog=false;syncToken=""}},title={Text("DEMO sinkronizacija")},text={
+        Column(verticalArrangement=Arrangement.spacedBy(4.dp)){
+            Text("Samo testni zapisi. Podatke šaljite isključivo na vlastiti pouzdani HTTPS server. Ovo nije fiskalizacija.")
+            OutlinedTextField(syncUrl,{syncUrl=it.take(512)},label={Text("HTTPS adresa API-ja")},singleLine=true)
+            OutlinedTextField(syncSubject,{syncSubject=it.take(36)},label={Text("ID testnog subjekta")},singleLine=true)
+            OutlinedTextField(syncToken,{syncToken=it.take(64)},label={Text("Token uređaja")},singleLine=true,visualTransformation=PasswordVisualTransformation())
+            OutlinedButton(enabled=!busy,onClick={
+                working(true)
+                scope.launch{try{
+                    withContext(Dispatchers.IO){runCatching{DemoDeviceIdentity.enrollment()}}
+                        .onSuccess{enrollment=it}
+                        .onFailure{message="Ključ uređaja nije dostupan."}
+                }finally{working(false)}}
+            }){Text("Pripremi javni ključ uređaja")}
+            OutlinedButton(enabled=!busy&&syncToken.matches(Regex("[0-9a-f]{64}"))&&syncUrl.isNotBlank()&&syncSubject.isNotBlank(),onClick={
+                val url=syncUrl;val subject=syncSubject;val token=syncToken
+                syncToken="";syncDialog=false;working(true)
+                scope.launch{try{
+                    withContext(Dispatchers.IO){runCatching{DemoDocumentJournal(context).synchronize(url,subject,business.oib,token)}}
+                        .onSuccess{result->
+                            message="Potvrđeni dokumenti: "+result.matched+" · Samo na serveru: "+result.remoteOnly.size
+                            remoteDocuments=result.remoteOnly;documentIndex=0
+                        }
+                        .onFailure{message="Sinkronizacija dokumenata nije potvrđena. Lokalni računi ostaju nepromijenjeni."}
+                }finally{working(false)}}
+            }){Text("Sinkroniziraj DEMO dokumente")}
+            OutlinedButton(enabled=!busy&&syncSubject.isNotBlank(),onClick={
+                documentExportSubject=syncSubject;syncToken="";syncDialog=false
+                working(true);documentExport.launch("FiskAI-DEMO-dokumenti.json")
+            }){Text("Izvezi potpisane DEMO dokumente")}
+            Text("Izvoz sadrži sadržaj testnih računa. Datoteka je potpisana, nije šifrirana. Koristite samo testne podatke.")
+            enrollment?.let{key->
+                Text(if(key.hardwareBacked)"Ključ zaštićen hardverom" else "Ključ zaštićen sustavom Android Keystore")
+                TextButton(enabled=!busy,onClick={
+                    val clipboard=context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    clipboard.setPrimaryClip(android.content.ClipData.newPlainText("FiskAI javni ključ",key.publicKey))
+                    message="Javni ključ kopiran. Predajte ga administratoru vlastitog servera."
+                }){Text("Kopiraj javni ključ")}
+            }
+        }
+    },confirmButton={TextButton(enabled=!busy&&syncToken.matches(Regex("[0-9a-f]{64}"))&&syncUrl.isNotBlank()&&syncSubject.isNotBlank(),onClick={
+        val url=syncUrl;val subject=syncSubject;val token=syncToken
+        syncToken="";syncDialog=false
+        working(true)
+        scope.launch{try{
+            withContext(Dispatchers.IO){runCatching{DemoSyncJournal(context).synchronize(url,subject,business.oib,token,store.demoSyncEvents(business))}}
+                .onSuccess{message="Potvrđeni lokalni zapisi: "+it.matched+" · Samo na serveru: "+it.remoteOnly}
+                .onFailure{message="Prijenos nije u cijelosti potvrđen. Lokalni zapisi ostaju sačuvani. Provjerite adresu, pristup ili sukob zapisa pa pokušajte ponovno."}
+        }finally{working(false)}}
+    }){Text("Usporedi i sinkroniziraj")}},dismissButton={TextButton(enabled=!busy,onClick={syncDialog=false;syncToken=""}){Text("Odustani")}})
+    remoteDocuments?.let{documents->
+        val document=documents.getOrNull(documentIndex)
+        AlertDialog(onDismissRequest={remoteDocuments=null},title={Text("Serverski DEMO dokumenti")},text={
+            Column(verticalArrangement=Arrangement.spacedBy(8.dp)){
+                Text("Pregled dokumenata koji nisu u lokalnoj evidenciji. Ne dodjeljuje im nove brojeve niti ih knjiži.")
+                if(document==null)Text("Nema dodatnih dokumenata.")
+                else{
+                    val snapshot=org.json.JSONObject(document.snapshot)
+                    Text(document.number,fontWeight=FontWeight.Bold)
+                    Text(snapshot.optString("customer").take(120))
+                    Text(snapshot.optString("total").take(32)+" EUR")
+                    Text((documentIndex+1).toString()+" / "+documents.size)
+                    Row(horizontalArrangement=Arrangement.spacedBy(4.dp)){
+                        TextButton(enabled=documentIndex>0,onClick={documentIndex--}){Text("Prethodni")}
+                        TextButton(enabled=documentIndex<documents.lastIndex,onClick={documentIndex++}){Text("Sljedeći")}
+                    }
+                }
+            }
+        },confirmButton={TextButton(onClick={remoteDocuments=null}){Text("Zatvori")}})
     }
     if(manual)AlertDialog(onDismissRequest={if(!busy)manual=false},title={Text("Gotovinski primitak")},text={
         Column(verticalArrangement=Arrangement.spacedBy(4.dp)){

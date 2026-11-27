@@ -1,7 +1,7 @@
 name: Official CIS contract acquisition
 on:
   pull_request:
-    paths: ['scripts/fetch-fiscal-contracts.py','scripts/verify-fiscal-contracts.py','server/contracts/**','server/src/FiscalContract.php','server/src/FiscalSignature.php','server/tests/OfficialFiscalContractTest.php','server/src/FiscalResponse.php','server/src/CisEducResponseEvidence.php','server/database/**','server/tests/FiscalResponseTest.php','.github/workflows/fiscal-contracts.yml']
+    paths: ['scripts/fetch-fiscal-contracts.py','scripts/verify-fiscal-contracts.py','server/contracts/**','server/src/FiscalContract.php','server/src/FiscalSignature.php','server/src/CisEducRequestPreparation.php','server/src/CisEducDispatch.php','server/src/CisEducHttpsTransport.php','server/src/CisCertificateTrust.php','server/src/CisEducRecovery.php','server/src/EducBusinessLedger.php','server/src/EducInvoiceMath.php','server/src/EducCreditLimits.php','server/src/EducAccountingPreview.php','server/src/EducRemoteCheckpoint.php','server/src/EducExternalCheckpoint.php','server/tests/EducExternalCheckpointTest.php','server/tests/EducBusinessLedgerTest.php','server/bin/cis-educ-recovery.php','server/tests/CertificateTrustTest.php','scripts/test-certificate-trust.sh','server/tests/CisEducDispatchTest.php','server/tests/OfficialFiscalContractTest.php','server/src/FiscalResponse.php','server/src/CisEducResponseEvidence.php','server/database/**','server/tests/FiscalResponseTest.php','.github/workflows/fiscal-contracts.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -31,6 +31,7 @@ jobs:
       FISKAI_DB_DSN: mysql:host=127.0.0.1;port=3306;dbname=fiskai_test;charset=utf8mb4
       FISKAI_DB_USER: root
       FISKAI_DB_PASSWORD: ci-only-password
+      FISKAI_CI_RECOVERY_TEST: '1'
     steps:
       - uses: actions/checkout@v7
         with:
@@ -38,12 +39,16 @@ jobs:
       - run: python3 scripts/fetch-fiscal-contracts.py contract-review
       - name: Verify pinned contract bytes
         run: python3 scripts/verify-fiscal-contracts.py contract-review
+      - name: Verify local CA and revocation fixtures
+        run: bash scripts/test-certificate-trust.sh
       - name: Validate signed offline request against official XSD
         run: |
           set -euo pipefail
           schema="$(find contract-review/Fiskalizacija-WSDL-EDUC_v1.10 -type f -name FiskalizacijaSchema.xsd)"
           php server/tests/OfficialFiscalContractTest.php "$(dirname "$schema")"
           php server/tests/FiscalResponseTest.php "$(dirname "$schema")"
+          php server/tests/CisEducDispatchTest.php "$(dirname "$schema")"
+          php server/tests/EducBusinessLedgerTest.php "$(dirname "$schema")"
       - uses: actions/upload-artifact@v6
         with:
           name: FiskAI-official-contracts-unreviewed-${{ strategy.job-index }}

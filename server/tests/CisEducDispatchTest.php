@@ -1,0 +1,128 @@
+<?php
+declare(strict_types=1);
+// Reuse the official schema and synthetic signing credential fixture; no network.
+require __DIR__.'/OfficialFiscalContractTest.php';
+require_once __DIR__.'/../src/SchemaMigrator.php';
+require_once __DIR__.'/../src/CisEducDispatch.php';
+function dispatchCheck(bool $ok):void {if(!$ok)throw new RuntimeException('Dispatch test failed.');}
+function dispatchReject(string $type,callable $call):void {
+    try{$call();}catch(Throwable $e){if($e instanceof $type)return;throw $e;}
+    throw new RuntimeException('Expected dispatch rejection missing.');
+}
+$db=db();SchemaMigrator::apply($db,__DIR__.'/../database');
+$dispatch=new CisEducDispatch($db);
+$subject='91000000-0000-4000-8000-000000000001';
+$document='92000000-0000-4000-8000-000000000001';
+$message='93000000-0000-4000-8000-000000000001';
+$invoice=str_replace('12345678-1234-4234-8234-123456789abc',$message,$invoice);
+$documentHash=hash('sha256','synthetic immutable dispatch document');
+$storageKey=random_bytes(32);
+$prepareDispatch=fn($value,$doc=null)=>$dispatch->prepare($subject,$doc??$document,$documentHash,$value,'12345678903',$key,$credential,$pin,$pin,$dir,'dispatch-fixture',$storageKey);
+dispatchCheck($prepareDispatch($invoice)===$message);
+dispatchCheck($prepareDispatch($invoice)===$message);
+dispatchCheck($dispatch->state($subject,$message)==='PREPARED');
+putenv('FISKAI_CIS_EDUC_ENABLED=0');
+dispatchReject(LogicException::class,fn()=>$dispatch->dispatchAuthorized($subject,$message,$credential,$credential,$dir,$storageKey));
+dispatchCheck($dispatch->state($subject,$message)==='PREPARED');
+$original=$dispatch->open($subject,$message,$storageKey);
+dispatchReject(RuntimeException::class,fn()=>$dispatch->open($subject,$message,random_bytes(32)));
+dispatchReject(DomainException::class,fn()=>$dispatch->open('91000000-0000-4000-8000-000000000002',$message,$storageKey));
+$newMessage='93000000-0000-4000-8000-000000000002';
+dispatchReject(DomainException::class,fn()=>$prepareDispatch(str_replace($message,$newMessage,$invoice)));
+$s=$db->prepare('SELECT COUNT(*) FROM cis_educ_response_evidence WHERE message_id=?');
+$s->execute([$newMessage]);dispatchCheck((int)$s->fetchColumn()===0);
+$s=$db->prepare('SELECT sealed_request FROM cis_educ_dispatch WHERE message_id=?');
+$s->execute([$message]);dispatchCheck(!str_contains($s->fetchColumn(),'RacunZahtjev'));
+// A separately recorded or partially recorded response must prevent dispatch.
+$s=$db->prepare('UPDATE cis_educ_response_evidence SET response_sha256=? WHERE message_id=?');
+$s->execute([hash('sha256','fixture inconsistent response'),$message]);
+dispatchReject(DomainException::class,fn()=>$dispatch->reserve($subject,$message,$storageKey));
+dispatchReject(DomainException::class,fn()=>$prepareDispatch($invoice));
+$s->execute([null,$message]);
+$reserved=$dispatch->reserve($subject,$message,$storageKey);
+dispatchCheck($reserved['soap']===$original&&$reserved['requestSha256']===hash('sha256',$original));
+dispatchReject(DomainException::class,fn()=>$dispatch->reserve($subject,$message,$storageKey));
+dispatchCheck(!$dispatch->uncertain($subject,$message,str_repeat('0',64)));
+dispatchCheck($dispatch->recoverInterrupted($subject)===0);
+$s=$db->prepare("UPDATE cis_educ_dispatch SET reserved_at=UTC_TIMESTAMP(6)-INTERVAL 6 MINUTE WHERE message_id=?");$s->execute([$message]);
+dispatchCheck($dispatch->recoverInterrupted($subject)===1);
+dispatchCheck($dispatch->state($subject,$message)==='UNCERTAIN');
+dispatchReject(DomainException::class,fn()=>$dispatch->reserve($subject,$message,$storageKey));
+// A signed synthetic response is not a real CIS receipt.
+$jir='94000000-0000-4000-8000-000000000001';
+$xmlResponse='<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" xmlns:f="http://www.apis-it.hr/fin/2012/types/f73"><s:Body><f:RacunOdgovor Id="response1"><f:Zaglavlje><f:IdPoruke>'.$message.'</f:IdPoruke><f:DatumVrijeme>27.11.2026T09:00:00</f:DatumVrijeme></f:Zaglavlje><f:Jir>'.$jir.'</f:Jir></f:RacunOdgovor></s:Body></s:Envelope>';
+$d=new DOMDocument();$d->loadXML($xmlResponse,LIBXML_NONET);
+$root=$d->getElementsByTagNameNS('http://www.apis-it.hr/fin/2012/types/f73','RacunOdgovor')->item(0);
+$hash=base64_encode(hash('sha256',$root->C14N(false,false),true));
+$ns='http://www.w3.org/2000/09/xmldsig#';$canonical='http://www.w3.org/TR/2001/REC-xml-c14n-20010315';
+$sig=$d->createElementNS($ns,'ds:Signature');$root->appendChild($sig);
+$fragment=$d->createDocumentFragment();
+$fragment->appendXML('<ds:SignedInfo xmlns:ds="'.$ns.'"><ds:CanonicalizationMethod Algorithm="'.$canonical.'"/><ds:SignatureMethod Algorithm="http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"/><ds:Reference URI="#response1"><ds:Transforms><ds:Transform Algorithm="'.$ns.'enveloped-signature"/><ds:Transform Algorithm="'.$canonical.'"/></ds:Transforms><ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/><ds:DigestValue>'.$hash.'</ds:DigestValue></ds:Reference></ds:SignedInfo>');
+$sig->appendChild($fragment);
+if(!openssl_sign($sig->firstChild->C14N(false,false),$signedResponse,$key,OPENSSL_ALGO_SHA256))throw new RuntimeException('Fixture signing failed.');
+$sig->appendChild($d->createElementNS($ns,'ds:SignatureValue',base64_encode($signedResponse)));
+$response=$d->saveXML();
+$verifyDispatch=fn($value,$reservation=null)=>$dispatch->verifyResponse($subject,$message,$reservation??$reserved['reservation'],$value,$credential,$dir,$storageKey);
+dispatchReject(DomainException::class,fn()=>$verifyDispatch($response,str_repeat('0',64)));
+dispatchReject(InvalidArgumentException::class,fn()=>$verifyDispatch($xmlResponse));
+dispatchReject(InvalidArgumentException::class,fn()=>$verifyDispatch(str_replace($jir,'94000000-0000-4000-8000-000000000002',$response)));
+dispatchCheck($dispatch->state($subject,$message)==='UNCERTAIN');
+dispatchReject(InvalidArgumentException::class,fn()=>$dispatch->recoverVerifiedResponse($subject,$message,$xmlResponse,$credential,$dir,$storageKey));
+dispatchCheck($dispatch->recoverVerifiedResponse($subject,$message,$response,$credential,$dir,$storageKey)===$jir);
+dispatchCheck($dispatch->state($subject,$message)==='VERIFIED');
+dispatchCheck($verifyDispatch($response)===$jir);
+dispatchCheck((new CisEducResponseEvidence($db))->open($subject,$message,$storageKey)===$response);
+dispatchReject(DomainException::class,fn()=>$dispatch->reserve($subject,$message,$storageKey));
+$s=$db->prepare('SELECT event_type FROM cis_educ_dispatch_audit WHERE message_id=? ORDER BY event_type');
+$s->execute([$message]);dispatchCheck($s->fetchAll(PDO::FETCH_COLUMN)===['PREPARED','RESERVED','UNCERTAIN','VERIFIED']);
+echo "Offline EDUC dispatch: encrypted request, single reservation, crash recovery, authenticated response and rollback passed.\n";
+
+if(getenv('FISKAI_CI_RECOVERY_TEST')==='1'){
+    require_once __DIR__.'/../src/CisEducRecovery.php';
+    $pending='93000000-0000-4000-8000-000000000003';
+    $pendingDoc='92000000-0000-4000-8000-000000000003';
+    $pendingZki=CisEducRequestPreparation::zki('12345678903','27.11.2026 09:00:00','2','PP1','1','12.50',$key);
+    $pendingInvoice=str_replace([$message,'<f:BrOznRac>1</f:BrOznRac>',$zki],[$pending,'<f:BrOznRac>2</f:BrOznRac>',$pendingZki],$invoice);
+    dispatchCheck($prepareDispatch($pendingInvoice,$pendingDoc)===$pending);
+    $archiveKey=random_bytes(32);
+    $recovery=new CisEducRecovery($db);
+    $archive=$recovery->export($subject,'dispatch-fixture',$archiveKey,$storageKey);
+    dispatchCheck(!str_contains($archive,'RacunZahtjev')&&!str_contains($archive,$message));
+    dispatchReject(InvalidArgumentException::class,fn()=>$recovery->export($subject,'dispatch-fixture',$storageKey,$storageKey));
+    dispatchReject(InvalidArgumentException::class,fn()=>$recovery->export($subject,'other-key-id',$archiveKey,$storageKey));
+    $dsn=getenv('FISKAI_DB_DSN');
+    $name='fiskai_recovery_test_'.bin2hex(random_bytes(6));
+    $targetDsn=str_replace('dbname=fiskai_test;','dbname='.$name.';',$dsn);
+    if($targetDsn===$dsn)throw new RuntimeException('Expected CI database only.');
+    $db->exec('CREATE DATABASE `'.$name.'` CHARACTER SET utf8mb4');
+    $target=null;
+    try{
+        $target=new PDO($targetDsn,getenv('FISKAI_DB_USER'),getenv('FISKAI_DB_PASSWORD'),[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION,PDO::ATTR_EMULATE_PREPARES=>false]);
+        $target->exec("SET time_zone = '+00:00'");
+        SchemaMigrator::apply($target,__DIR__.'/../database');
+        $restore=new CisEducRecovery($target);
+        putenv('FISKAI_CIS_RECOVERY_MODE=0');
+        dispatchReject(LogicException::class,fn()=>$restore->restore($subject,'dispatch-fixture',$archive,$archiveKey,$storageKey));
+        putenv('FISKAI_CIS_RECOVERY_MODE=1');
+        $changed=$archive;$changed[strlen($changed)-1]=chr(ord($changed[strlen($changed)-1])^1);
+        dispatchReject(InvalidArgumentException::class,fn()=>$restore->restore($subject,'dispatch-fixture',$changed,$archiveKey,$storageKey));
+        dispatchReject(InvalidArgumentException::class,fn()=>$restore->restore($subject,'dispatch-fixture',$archive,random_bytes(32),$storageKey));
+        dispatchReject(RuntimeException::class,fn()=>$restore->restore($subject,'dispatch-fixture',$archive,$archiveKey,random_bytes(32)));
+        dispatchCheck((int)$target->query('SELECT COUNT(*) FROM cis_educ_response_evidence')->fetchColumn()===0);
+        dispatchCheck($restore->restore($subject,'dispatch-fixture',$archive,$archiveKey,$storageKey)===2);
+        $recovered=new CisEducDispatch($target);
+        dispatchCheck($recovered->state($subject,$message)==='VERIFIED');
+        dispatchCheck($recovered->state($subject,$pending)==='UNCERTAIN');
+        dispatchCheck($recovered->open($subject,$message,$storageKey)===$original);
+        dispatchCheck((new CisEducResponseEvidence($target))->open($subject,$message,$storageKey)===$response);
+        dispatchReject(DomainException::class,fn()=>$recovered->reserve($subject,$pending,$storageKey));
+        dispatchReject(DomainException::class,fn()=>$restore->restore($subject,'dispatch-fixture',$archive,$archiveKey,$storageKey));
+        $s=$target->prepare("SELECT COUNT(*) FROM cis_educ_dispatch_audit WHERE message_id=? AND event_type='RESTORED_QUARANTINE'");$s->execute([$pending]);
+        dispatchCheck((int)$s->fetchColumn()===1);
+        echo "EDUC recovery archive: authenticated export, tamper rejection, rollback, restore and quarantine passed.\n";
+    }finally{
+        $target=null;
+        $db->exec('DROP DATABASE `'.$name.'`');
+        putenv('FISKAI_CIS_RECOVERY_MODE=0');
+    }
+}

@@ -84,6 +84,63 @@ class PaymentPreparationInstrumentedTest {
             assertEquals(1150L,receipts.demoPaymentSelection(finalPayment.id).choices.single().remainingCents)
             val finalEvent=receipts.prepareDemoPayment(finalPayment.id,second)
             assertEquals(0L,receipts.demoPaymentSelection(finalPayment.id).choices.single().remainingCents)
+            val syncEvents=receipts.demoSyncEvents(business)
+            assertEquals(3,syncEvents.size)
+            assertTrue(receipts.demoSyncEvents(business.copy(oib="00000000001")).isEmpty())
+            val subject="71000000-0000-4000-8000-000000000001"
+            val envelope=JSONObject(DemoDocumentExchange.export(ctx,source,business.oib,subject))
+            val payload=android.util.Base64.decode(envelope.getString("payload"),android.util.Base64.NO_WRAP)
+            val signature=android.util.Base64.decode(envelope.getString("signature"),android.util.Base64.NO_WRAP)
+            val enrollment=DemoDeviceIdentity.enrollment()
+            val publicKey=java.security.KeyFactory.getInstance("EC").generatePublic(java.security.spec.X509EncodedKeySpec(
+                android.util.Base64.decode(enrollment.publicKey,android.util.Base64.NO_WRAP)))
+            assertTrue(java.security.Signature.getInstance("SHA256withECDSA").run{initVerify(publicKey);update(payload);verify(signature)})
+            val bundle=JSONObject(payload.toString(Charsets.UTF_8))
+            assertEquals(subject,bundle.getString("subjectId"))
+            assertEquals(business.oib,bundle.getString("ownerOib"))
+            val docs=bundle.getJSONArray("documents")
+            assertEquals(2,docs.length())
+            val exportedIds=mutableSetOf<String>()
+            for(i in 0 until docs.length()){
+                val row=docs.getJSONObject(i)
+                val id=row.getString("documentId")
+                exportedIds.add(id)
+                assertEquals(room.queue().document(id).digest,row.getString("digest"))
+                assertEquals(FiscalCutover.digest(row.getString("snapshot")),row.getString("digest"))
+                assertEquals("DEMO",JSONObject(row.getString("snapshot")).getString("environment"))
+            }
+            assertEquals(setOf(doc,second),exportedIds)
+            val replicaSubject=UUID.randomUUID().toString()
+            val replicaUrl="https://example.test/api.php"
+            val replicaScope=FiscalCutover.digest("DEMO_DOCUMENT_REPLICA_V1\u0000"+DemoSyncClient.endpoint(replicaUrl).toASCIIString()+"\u0000"+replicaSubject+"\u0000"+business.oib)
+            val replicaFile=java.io.File(ctx.noBackupFilesDir,"demo-document-replica/"+replicaScope+".checkpoint")
+            try{
+                val snapshot=JSONObject().put("protocol",1).put("subjectId",replicaSubject).put("ownerOib",business.oib)
+                    .put("status","DEMO_DOCUMENT_SNAPSHOT").put("documents",docs)
+                val remote=DemoDocumentJournal.snapshot(snapshot,replicaSubject,business.oib)
+                val journal=DemoDocumentJournal(ctx,source)
+                val result=journal.reconcileAndSave(replicaUrl,replicaSubject,business.oib,listOf(remote.first()),snapshot)
+                assertEquals(1,result.matched)
+                assertEquals(listOf(remote.last()),result.remoteOnly)
+                assertFalse(replicaFile.readText().contains(doc))
+                assertEquals(result,DemoDocumentJournal(ctx,source).reconcileAndSave(replicaUrl,replicaSubject,business.oib,listOf(remote.first()),snapshot))
+                val shorter=JSONObject(snapshot.toString()).put("documents",org.json.JSONArray().put(docs.getJSONObject(0)))
+                assertTrue(runCatching{journal.reconcileAndSave(replicaUrl,replicaSubject,business.oib,emptyList(),shorter)}.isFailure)
+                val changed=remote.first().copy(digest="0".repeat(64))
+                assertTrue(runCatching{DemoDocumentJournal.compare(listOf(changed),remote,emptyList())}.isFailure)
+                assertTrue(runCatching{DemoDocumentJournal.snapshot(snapshot,replicaSubject,"00000000001")}.isFailure)
+                assertEquals(setOf(doc,second),room.queue().history().map{it.id}.toSet())
+            }finally{android.util.AtomicFile(replicaFile).delete()}
+            assertTrue(runCatching{DemoDocumentExchange.export(ctx,source,"00000000001",subject)}.isFailure)
+            val request=DemoSyncClient.request(subject,syncEvents)
+            assertEquals(subject,request.getString("subjectId"))
+            assertFalse(request.toString().contains(business.oib))
+            assertFalse(request.toString().contains("Sintetički dokaz"))
+            val ack=JSONObject().put("protocol",1).put("subjectId",subject).put("status","DEMO_METADATA_STORED")
+                .put("accepted",org.json.JSONArray(syncEvents.map{it.getString("eventId")}))
+            DemoSyncClient.verifyAck(subject,syncEvents,ack)
+            val badAck=JSONObject(ack.toString()).put("subjectId","71000000-0000-4000-8000-000000000002")
+            assertTrue(runCatching{DemoSyncClient.verifyAck(subject,syncEvents,badAck)}.isFailure)
             val exported=SecureRecords.exportWorkspace(ctx,source)
             val root=JSONObject(exported)
             assertEquals(5,root.getInt("version"))
@@ -108,5 +165,79 @@ class PaymentPreparationInstrumentedTest {
             room.close();targetRoom.close();legacyRoom.close();source.close();target.close();legacy.close()
             ctx.deleteDatabase(sourceName);ctx.deleteDatabase(targetName);ctx.deleteDatabase(legacyName)
         }
+    }
+    @Test fun demoSyncEndpointRestrictions() {
+        assertEquals("https://example.test/fiskai/api.php?action=demo-sync",DemoSyncClient.endpoint("https://example.test/fiskai/api.php").toString())
+        for(url in listOf("http://example.test/api.php","https://user@example.test/api.php",
+            "https://example.test/api.php?extra=1","https://example.test/api.php#fragment",
+            "https://example.test:8080/api.php","https://example.test/other.php",
+            "https://example.test/../api.php","https://example.test/%61pi.php")) {
+            assertTrue(url,runCatching{DemoSyncClient.endpoint(url)}.isFailure)
+        }
+    }
+    @Test fun durableSyncCheckpointRejectsRollbackAndConflict() {
+        if(!BuildConfig.DEMO_MODE)return
+        val ctx=InstrumentationRegistry.getInstrumentation().targetContext
+        val subject=UUID.randomUUID().toString()
+        val owner="12345678903"
+        val url="https://example.test/api.php"
+        val id=FiscalCutover.digest("DEMO_SYNC_V1\u0000"+DemoSyncClient.endpoint(url).toASCIIString()+"\u0000"+subject+"\u0000"+owner)
+        val file=java.io.File(ctx.noBackupFilesDir,"demo-sync/"+id+".checkpoint")
+        fun row()=JSONObject().put("eventId",UUID.randomUUID().toString())
+            .put("receiptId",FiscalCutover.digest(UUID.randomUUID().toString()))
+            .put("documentId",UUID.randomUUID().toString()).put("evidenceSha256",FiscalCutover.digest("test"))
+            .put("eventDate","2026-12-31").put("amountCents",1250)
+            .put("ruleVersion","HR-F2-2026-v1").put("deadlineDate","2027-01-20")
+        val first=row()
+        val remoteOnly=row()
+        try {
+            val remote=listOf(first,remoteOnly)
+            val snapshot=JSONObject().put("protocol",1).put("subjectId",subject)
+                .put("status","DEMO_METADATA_SNAPSHOT").put("events",org.json.JSONArray(remote))
+            val validated=DemoSyncClient.snapshot(subject,snapshot)
+            val local=JSONObject(first.toString()).put("environment","DEMO").put("kind","DEMO_PAYMENT_PREPARATION")
+            assertEquals(DemoSyncJournal.Result(1,1,2),DemoSyncJournal(ctx).reconcileAndSave(url,subject,owner,listOf(local),validated))
+            assertTrue(file.exists())
+            assertFalse(file.readText().contains(first.getString("eventId")))
+            assertEquals(DemoSyncJournal.Result(1,1,2),DemoSyncJournal(ctx).reconcileAndSave(url,subject,owner,listOf(local),validated))
+            assertTrue(runCatching{DemoSyncJournal(ctx).reconcileAndSave(url,subject,owner,listOf(local),listOf(first))}.isFailure)
+            val conflict=JSONObject(first.toString()).put("amountCents",1251)
+            assertTrue(runCatching{DemoSyncJournal(ctx).reconcileAndSave(url,subject,owner,listOf(local),listOf(conflict,remoteOnly))}.isFailure)
+            assertTrue(runCatching{DemoSyncClient.snapshot(UUID.randomUUID().toString(),snapshot)}.isFailure)
+            val duplicate=JSONObject(snapshot.toString()).put("events",org.json.JSONArray(listOf(first,first)))
+            assertTrue(runCatching{DemoSyncClient.snapshot(subject,duplicate)}.isFailure)
+            assertEquals(DemoSyncJournal.Result(1,1,2),DemoSyncJournal(ctx).reconcileAndSave(url,subject,owner,listOf(local),validated))
+            file.writeText("corrupted")
+            assertTrue(runCatching{DemoSyncJournal(ctx).reconcileAndSave(url,subject,owner,listOf(local),validated)}.isFailure)
+        }finally{android.util.AtomicFile(file).delete()}
+    }
+    @Test fun installationKeySignsExactChallengeAndCannotExportPrivateKey() {
+        if(!BuildConfig.DEMO_MODE)return
+        val enrolled=DemoDeviceIdentity.enrollment()
+        assertEquals(enrolled,DemoDeviceIdentity.enrollment())
+        val bytes=android.util.Base64.decode(enrolled.publicKey,android.util.Base64.NO_WRAP)
+        assertEquals(DemoDeviceIdentity.digest(bytes),enrolled.fingerprint)
+        val publicKey=java.security.KeyFactory.getInstance("EC").generatePublic(java.security.spec.X509EncodedKeySpec(bytes))
+        val subject="81000000-0000-4000-8000-000000000001"
+        val device="81000000-0000-4000-8000-000000000002"
+        val nonce="a".repeat(64);val token="b".repeat(64)
+        val body="{\"protocol\":1,\"subjectId\":\"$subject\"}".toByteArray(Charsets.UTF_8)
+        val msg=DemoDeviceIdentity.message("demo-sync-pull",subject,device,nonce,token,body)
+        val expected=listOf("FISKAI-DEMO-PROOF-V1","demo-sync-pull",subject,device,nonce,
+            DemoDeviceIdentity.digest(token.toByteArray()),DemoDeviceIdentity.digest(body)).joinToString("\n")
+        assertArrayEquals(expected.toByteArray(Charsets.UTF_8),msg)
+        val sig=android.util.Base64.decode(DemoDeviceIdentity.sign(msg),android.util.Base64.NO_WRAP)
+        fun verify(value:ByteArray):Boolean {
+            val verifier=java.security.Signature.getInstance("SHA256withECDSA")
+            verifier.initVerify(publicKey)
+            verifier.update(value)
+            return verifier.verify(sig)
+        }
+        assertTrue(verify(msg))
+        assertFalse(verify(DemoDeviceIdentity.message("demo-sync",subject,device,nonce,token,body)))
+        assertFalse(verify(DemoDeviceIdentity.message("demo-sync-pull",subject,device,"c".repeat(64),token,body)))
+        assertFalse(verify(DemoDeviceIdentity.message("demo-sync-pull",subject,device,nonce,token,body+byteArrayOf(32))))
+        val store=java.security.KeyStore.getInstance("AndroidKeyStore").apply{load(null)}
+        assertNull(store.getKey("fiskai.demo.sync.ec.v1",null).encoded)
     }
 }
