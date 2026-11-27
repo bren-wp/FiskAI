@@ -39,7 +39,7 @@ internal object DemoDeviceIdentity {
         return Enrollment(Base64.encodeToString(public,Base64.NO_WRAP),digest(public),info.isInsideSecureHardware)
     }
     fun message(action:String,subject:String,device:String,nonce:String,token:String,body:ByteArray):ByteArray {
-        require(action in setOf("demo-sync","demo-sync-pull"))
+        require(action in setOf("demo-sync","demo-sync-pull","demo-documents-push","demo-documents-pull"))
         DemoSyncClient.identity(subject);DemoSyncClient.identity(device)
         require(nonce.matches(Regex("[0-9a-f]{64}"))&&token.matches(Regex("[0-9a-f]{64}")))
         return listOf("FISKAI-DEMO-PROOF-V1",action,subject,device,nonce,digest(token.toByteArray(Charsets.UTF_8)),digest(body))
