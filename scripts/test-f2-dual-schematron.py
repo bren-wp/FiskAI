@@ -90,8 +90,17 @@ def main():
     good = runner.run(args.archives, positive, args.en_xslt, en_pin, hr, hr_pin, args.output / "complete-invoice")
     results["complete-invoice"] = {"enFailedAssertions": sorted(findings(good["en16931"])),
                                   "hrFailedAssertions": sorted(findings(good["hrCius"]))}
-    require(not good["en16931"]["findings"] and not good["hrCius"]["findings"],
-            "Complete invoice has validation findings; inspect preserved SVRL")
+    # Croatian rules require IssueTime and SellerContact, while the base EN
+    # UBL restrictions report these as warnings. Preserve both raw reports.
+    # This proves the expected diagnostic outcome, NOT unconditional approval.
+    expected_warnings = [
+        {"id": "UBL-CR-006", "flag": "warning", "type": "failed-assert"},
+        {"id": "UBL-CR-200", "flag": "warning", "type": "failed-assert"},
+    ]
+    require(good["en16931"]["findings"] == expected_warnings and not good["hrCius"]["findings"],
+            "Unexpected complete invoice findings; inspect preserved SVRL")
+    results["complete-invoice"]["status"] = "NATIONAL_PROFILE_WARNINGS_REQUIRE_REVIEW"
+    results["complete-invoice"]["enFindings"] = good["en16931"]["findings"]
     with tempfile.TemporaryDirectory() as work:
         changed = Path(work) / "wrong-total.xml"
         data = positive.read_bytes()
