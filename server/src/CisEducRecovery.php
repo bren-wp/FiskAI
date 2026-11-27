@@ -39,7 +39,7 @@ final class CisEducRecovery {
     private function migrationManifest(int $version=2):array {
         $manifest=[];
         $names=['003_cis_educ_response_evidence.sql','006_cis_educ_dispatch.sql','007_cis_educ_audit.sql'];
-        if($version===2)array_push($names,'008_educ_business_ledger.sql','009_educ_business_chain_head.sql');
+        if($version===2)array_push($names,'008_educ_business_ledger.sql','009_educ_business_chain_head.sql','010_educ_recovery_quarantine.sql');
         foreach($names as $name){
             $file=__DIR__.'/../database/'.$name;
             $expected=hash_file('sha256',$file);
@@ -166,6 +166,8 @@ final class CisEducRecovery {
             $s->execute([$subject]);if($s->fetchColumn()!==false)throw new DomainException('Recovery target already contains subject records.');
             $s=$this->db->prepare('SELECT subject_id FROM educ_business_subject WHERE subject_id=? FOR UPDATE');
             $s->execute([$subject]);if($s->fetchColumn()!==false)throw new DomainException('Recovery target already contains business subject.');
+            $s=$this->db->prepare('SELECT subject_id FROM educ_recovery_quarantine WHERE subject_id=? FOR UPDATE');
+            $s->execute([$subject]);if($s->fetchColumn()!==false)throw new DomainException('Recovery target already quarantined.');
             foreach($definitions as $table=>$columns){
                 $insert=$this->db->prepare("INSERT INTO $table (".implode(',',$columns).') VALUES ('.implode(',',array_fill(0,count($columns),'?')).')');
                 foreach($tables[$table] as $row)$insert->execute(array_values($row));
@@ -177,6 +179,8 @@ final class CisEducRecovery {
                 if($row['state']==='VERIFIED')continue;
                 $update->execute([$row['message_id'],$subject]);$audit->execute([$row['message_id']]);
             }
+            $s=$this->db->prepare('INSERT INTO educ_recovery_quarantine(subject_id,restored_at) VALUES (?,UTC_TIMESTAMP(6))');
+            $s->execute([$subject]);
             return count($tables['cis_educ_dispatch']);
         });
     }
