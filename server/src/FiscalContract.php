@@ -6,9 +6,9 @@ declare(strict_types=1);
 final class FiscalContract {
     private const XSD='http://www.w3.org/2001/XMLSchema';
     private const MAX=1048576;
-    private static function parse(string $xml): DOMDocument {
+    private static function parse(string $xml,bool $schema=false): DOMDocument {
         if ($xml==='' || strlen($xml)>self::MAX || str_contains($xml,"\0") ||
-            str_contains($xml,'<!') || !preg_match('//u',$xml)) throw new InvalidArgumentException('Unsupported XML.');
+            ($schema ? preg_match('/<!\s*(?:DOCTYPE|ENTITY)\b/i',$xml) : str_contains($xml,'<!')) || !preg_match('//u',$xml)) throw new InvalidArgumentException('Unsupported XML.');
         $doc=new DOMDocument();
         if (!$doc->loadXML($xml,LIBXML_NONET) || $doc->doctype!==null) throw new InvalidArgumentException('Malformed XML.');
         return $doc;
@@ -34,7 +34,7 @@ final class FiscalContract {
                 $content=file_get_contents($path);
                 if($content===false||!hash_equals($digest,hash('sha256',$content)))
                     throw new InvalidArgumentException('Schema checksum mismatch.');
-                $schema=self::parse($content);
+                $schema=self::parse($content,true);
                 if($schema->documentElement?->namespaceURI!==self::XSD||$schema->documentElement?->localName!=='schema')
                     throw new InvalidArgumentException('Not an XML schema.');
                 $xpath=new DOMXPath($schema);

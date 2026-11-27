@@ -1,0 +1,14 @@
+{
+  "Fiskalizacija-WSDL-EDUC_v1.10.zip": {
+    "sha256": "1b6faf82f70defedf82f962a2182dc0a9427935c6a819e8695be041f4df2abeb",
+    "schema/FiskalizacijaSchema.xsd": "cb353823699e5f84f22f8b3bc7092c9442b7750edc95f10df7f650001dbb0a4c",
+    "schema/xmldsig-core-schema.xsd": "b5dc8ff871278af321723ce0ea0489ee8a3b95e282254f9fd774f91ed4fc0932",
+    "wsdl/FiskalizacijaService.wsdl": "3f6afbf077925b0f9c88318fc340ab7ffd26d4e95cb8b1a638005e7622304570"
+  },
+  "Fiskalizacija-WSDL-PROD_v1.10.zip": {
+    "sha256": "5552464d9128dccfe33efd9961ffd001a98ed0e8a268e1737ff0eb64d9a0f401",
+    "schema/FiskalizacijaSchema.xsd": "cb353823699e5f84f22f8b3bc7092c9442b7750edc95f10df7f650001dbb0a4c",
+    "schema/xmldsig-core-schema.xsd": "b5dc8ff871278af321723ce0ea0489ee8a3b95e282254f9fd774f91ed4fc0932",
+    "wsdl/FiskalizacijaService.wsdl": "533aa4b0396ba4f1221e7faa4b756dbfb5b7e3b23c360fc76b768cfa81c2ade2"
+  }
+}

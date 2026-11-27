@@ -1,6 +1,7 @@
 # Promjene
 
 ## 0.1.1 — kandidat (nije objavljeno)
+- SHA-256 pinovi stvarno preuzetih službenih EDUC/PROD WSDL v1.10 arhiva i XSD-a; offline validacija potpisanog primjera prema stvarnom EDUC XSD-u u posebnom CI workflowu.
 - Ulazni eRačuni: lokalni uvoz ograničenog podskupa UBL XML u EUR, provjera OIB primatelja, deduplikacija, šifrirani original, lokalna obrada, statusni pokazatelji i filtriranje prema referenci 07; uključeno u backup. Bez potvrde CIUS ili mrežne razmjene.
 - Katalog proizvoda i usluga prema referenci 08: kategorije, pretraga, sortiranje, PDV filtar, kompaktni popis, izbornik stavke i jedinice mjere u katalogu, nacrtu i POS-u. Vizualna verifikacija još nije završena.
 - Backup sadržaj v3 uključuje kanonske Room dokumente i outbox; transakcijski restore u objedinjenu bazu, SENDING → UNCERTAIN, test migracije i nastavka broja.
