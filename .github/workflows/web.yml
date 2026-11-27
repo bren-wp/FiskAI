@@ -2,10 +2,10 @@ name: Web
 on:
   workflow_call:
   pull_request:
-    paths: ['web/**','server/**','.github/workflows/web.yml','scripts/check-legal-catalog.py','app/src/main/java/hr/brendigo/fiskai/LegalRuleCatalog.kt']
+    paths: ['web/**','server/**','scripts/test-demo-sync-https.py','.github/workflows/web.yml','scripts/check-legal-catalog.py','app/src/main/java/hr/brendigo/fiskai/LegalRuleCatalog.kt']
   push:
     branches: [main, feature/native-alpha]
-    paths: ['web/**','server/**','.github/workflows/web.yml']
+    paths: ['web/**','server/**','scripts/test-demo-sync-https.py','.github/workflows/web.yml']
 permissions:
   contents: read
 jobs:
@@ -48,6 +48,7 @@ jobs:
       - run: php server/tests/FiscalEventOutboxTest.php
       - run: php server/tests/DemoSyncTest.php
       - run: php server/tests/DemoDeviceProofTest.php
+      - run: python3 scripts/test-demo-sync-https.py
       - run: php server/tests/FiscalContractTest.php
       - run: php server/tests/FiscalSignatureTest.php
       - name: Install XML signature verifier from official Ubuntu sources
