@@ -37,6 +37,7 @@ class MainActivity : ComponentActivity() {
         val store = DraftStore(this)
         val directory = DirectoryStore(this)
         val businessStore = BusinessStore(this)
+        val fiscalStore = FiscalSetupStore(this)
         setContent {
             MaterialTheme(colorScheme = lightColorScheme(primary = Blue, background = Surface, surface = Color.White, onSurface = Navy)) {
                 val loaded by produceState<Result<InitialData>?>(initialValue = null) {
@@ -47,7 +48,7 @@ class MainActivity : ComponentActivity() {
                 val result = loaded
                 when {
                     result == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-                    result.isSuccess -> FiskApp(store, directory, businessStore, result.getOrThrow())
+                    result.isSuccess -> FiskApp(store, directory, businessStore, fiscalStore, result.getOrThrow())
                     else -> Column(Modifier.fillMaxSize().safeDrawingPadding().padding(24.dp), verticalArrangement = Arrangement.Center) {
                         Text("Pohrana nije dostupna", style = MaterialTheme.typography.headlineSmall)
                         Text("Podaci nisu obrisani. Ponovno pokrenite aplikaciju. Ako se problem nastavi, obratite se podršci. Nemojte brisati podatke aplikacije.")
@@ -59,7 +60,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun FiskApp(store: DraftStore, directory: DirectoryStore, businessStore: BusinessStore, initial: InitialData) {
+private fun FiskApp(store: DraftStore, directory: DirectoryStore, businessStore: BusinessStore, fiscalStore: FiscalSetupStore, initial: InitialData) {
     var items by remember { mutableStateOf(initial.drafts) }
     var contacts by remember { mutableStateOf(initial.contacts) }
     var products by remember { mutableStateOf(initial.products) }
@@ -150,12 +151,13 @@ private fun FiskApp(store: DraftStore, directory: DirectoryStore, businessStore:
                 page == "Proizvodi i usluge" -> ProductScreen(products) { next ->
                     directory.saveProducts(next).also { if(it) products = next }
                 }
+                page == "Poslovni prostori" || page == "Naplatni uređaji" || page == "Operateri" -> FiscalSetupScreen(page, fiscalStore)
                 page == "Poslovni subjekt" -> BusinessScreen(business) { next ->
                     businessStore.save(next).also { if(it) business = next }
                 }
                 else -> {
                     Text("Više", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    listOf("Kupci", "Dobavljači", "Proizvodi i usluge", "Poslovni subjekt").forEach { destination ->
+                    listOf("Kupci", "Dobavljači", "Proizvodi i usluge", "Poslovni subjekt", "Poslovni prostori", "Naplatni uređaji", "Operateri").forEach { destination ->
                         OutlinedButton(onClick = { page = destination }, modifier = Modifier.fillMaxWidth()) { Text(destination) }
                     }
                     Panel { Text("Lokalna pohrana"); Text("Lokalni zapisi zaštićeni su ključem ovog uređaja. Fiskalizacija i eRačuni još nisu dostupni.") }

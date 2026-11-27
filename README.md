@@ -4,7 +4,7 @@
 
 FiskAI je hrvatska poslovna platforma u razvoju. Nativna Android aplikacija omogućuje lokalno sastavljanje nacrta računa i ponuda, lokalni imenik kupaca i dobavljača te katalog proizvoda i usluga te pregled poslovnih dokumenata.
 
-PDF nacrte moguće je izvesti u odabranu mapu uređaja. Lokalni zapisi šifrirani su putem Android Keystorea. Postavke poslovnog subjekta spremaju se na uređaju.
+PDF nacrte moguće je izvesti u odabranu mapu uređaja. Lokalni zapisi šifrirani su putem Android Keystorea. Postavke poslovnog subjekta, poslovnih prostora, naplatnih uređaja i operatera spremaju se na uređaju.
 
 ## Dostupnost
 
@@ -12,6 +12,6 @@ Trenutačno: razvojna verzija. Nacrti nisu izdani porezni dokumenti. Fiskalizaci
 
 ## Izgradnja
 
-Android Studio ili Gradle 9.9.2, JDK 17 i Android SDK 36. Iz korijena: gradle :app:testDebugUnitTest :app:assembleDebug :app:bundleDebug.
+Android Studio ili Gradle 9.9.2, JDK 17 i Android SDK 37.1. Iz korijena: gradle :app:testDebugUnitTest :app:assembleDebug :app:bundleDebug.
 
 MIT — vidi LICENSE.

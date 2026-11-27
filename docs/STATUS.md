@@ -1,5 +1,7 @@
-# Alpha04 acceptance status
+# Alpha05 acceptance status
 
-Implemented in source: draft and directory CRUD, PDF export, local company profile, OIB and Croatian IBAN checksum validation, AES-256-GCM record encryption with Android Keystore and legacy migration. SDK 36 compilation and target configured because runner could not resolve platforms;android-37. No dependencies downgraded in this change.
+Source additions: local fiscal setup, premises, registers and operators; reference integrity and duplicate checks; encrypted persistence; local create/list/delete screens and domain tests. These settings are NOT registered with the tax authority and are not tied to issued invoice sequences yet. Validation is intentionally a conservative local subset, not legal certification.
 
-Still required: successful CI and device tests, migration and tamper instrumentation tests, background write handling and transactional database (Room), recoverable encrypted backup, company premises/devices/operators, regulatory integration, actual screenshots and pixel comparison. PDF export produces unencrypted documents at user-selected destination. No issued invoices, fiscalization, signed XML, eInvoice transport, server or release yet. Do not enter real taxpayer data until acceptance.
+CI run 8 reached Gradle after SDK setup succeeded; AAR metadata requires compile SDK 37.1. Correct package platforms;android-37.1 and AGP minorApiLevel DSL now configured. targetSdk remains 36. No downgrade or AAR check bypass. Pending build verification.
+
+Remaining: Room transactional DB, migrations and device tests, edit/retire workflow, certificates, test CIS and eInvoice integrations, backup, web, real branding assets and visual acceptance. No production issuance or stable release.

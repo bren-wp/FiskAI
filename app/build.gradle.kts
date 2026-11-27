@@ -4,13 +4,13 @@ plugins {
 }
 android {
     namespace = "hr.brendigo.fiskai"
-    compileSdk = 36
+    compileSdk { version = release(37) { minorApiLevel = 1 } }
     defaultConfig {
         applicationId = "hr.brendigo.fiskai"
         minSdk = 24
         targetSdk = 36
-        versionCode = 4
-        versionName = "0.1.0-alpha04"
+        versionCode = 5
+        versionName = "0.1.0-alpha05"
     }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     buildFeatures { compose = true }
