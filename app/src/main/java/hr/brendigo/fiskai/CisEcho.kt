@@ -1,12 +1,10 @@
 package hr.brendigo.fiskai
 
-import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.net.URL
 import java.net.Proxy
 import java.util.UUID
 import javax.net.ssl.HttpsURLConnection
-import javax.xml.parsers.DocumentBuilderFactory
 import org.w3c.dom.Element
 
 internal object CisEcho {
@@ -22,18 +20,7 @@ internal object CisEcho {
 
     fun matchesResponse(id: String, data: ByteArray): Boolean = runCatching {
         require(data.size in 1..LIMIT)
-        // Reject DOCTYPE/entity declarations before parsing, including non-UTF-8/NUL forms.
-        val text = data.toString(Charsets.UTF_8)
-        require(!text.contains('\u0000') && !text.contains("<!") )
-        val factory = DocumentBuilderFactory.newInstance().apply {
-            isNamespaceAware = true
-            isExpandEntityReferences = false
-            setFeature("http://xml.org/sax/features/external-general-entities", false)
-            setFeature("http://xml.org/sax/features/external-parameter-entities", false)
-        }
-        val builder = factory.newDocumentBuilder()
-        builder.setEntityResolver { _, _ -> throw org.xml.sax.SAXException("External entity forbidden") }
-        val root = builder.parse(ByteArrayInputStream(data)).documentElement
+        val root = RestrictedXml.parse(data,LIMIT).documentElement
         fun children(e: Element): List<Element> = (0 until e.childNodes.length).mapNotNull { e.childNodes.item(it) as? Element }
         require(root.namespaceURI == SOAP && root.localName == "Envelope")
         val envelopeChildren=children(root)

@@ -5,17 +5,13 @@ import android.util.Base64
 import org.json.JSONArray
 import org.json.JSONObject
 import org.w3c.dom.Element
-import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.math.BigDecimal
-import java.nio.ByteBuffer
-import java.nio.charset.CodingErrorAction
 import java.security.MessageDigest
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
-import javax.xml.parsers.DocumentBuilderFactory
 
 internal data class IncomingInvoice(val key:String,val supplier:String,val supplierOib:String,
     val buyerOib:String,val number:String,val date:String,val amount:BigDecimal,val digest:String,val status:String,val xml:String)
@@ -55,16 +51,7 @@ internal object IncomingUbl {
     }
     fun parse(bytes:ByteArray,buyer:String):IncomingInvoice {
         require(bytes.size in 1..MAX&&validOib(buyer))
-        val xml=Charsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT).onUnmappableCharacter(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(bytes)).toString()
-        require(!xml.contains('\u0000')&&!xml.contains("<!"))
-        val builder=DocumentBuilderFactory.newInstance().apply{
-            isNamespaceAware=true
-            isExpandEntityReferences=false
-            setFeature("http://xml.org/sax/features/external-general-entities",false)
-            setFeature("http://xml.org/sax/features/external-parameter-entities",false)
-        }.newDocumentBuilder()
-        builder.setEntityResolver{_,_->throw org.xml.sax.SAXException("External entity forbidden")}
-        val document=builder.parse(ByteArrayInputStream(bytes))
+        val document=RestrictedXml.parse(bytes,MAX)
         val root=document.documentElement
         require(document.doctype==null&&root.namespaceURI==INV&&root.localName=="Invoice")
         val number=text(root,CBC,"ID",128)
