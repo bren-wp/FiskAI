@@ -16,6 +16,10 @@ FiskAI je hrvatska Android aplikacija za pripremu računa i ponuda, upravljanje 
 
 <p align="center"><img src="branding/logo.svg" alt="FiskAI" width="240"></p>
 
+## FiskAI Web
+
+Javni pregled aktualnih i arhivskih cjenika, CSV i XML datoteke te pretraživanje službenog KPD kataloga nakon uvoza podataka. [Web dokumentacija](web/README.md).
+
 ## Dostupnost
 
 Trenutačna verzija namijenjena je testiranju. Dokumenti su nacrti, a fiskalni moduli nisu odobreni za produkcijsko izdavanje računa. Bazne cijene i KPD zahtijevaju provjeru izvora. Slike iznad su vektorski identitet, ne snimke aplikacije.

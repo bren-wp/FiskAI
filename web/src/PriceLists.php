@@ -50,14 +50,15 @@ final class PriceLists {
         if(!preg_match('/\A[0-9]{8,13}\z/D',$identifier)) throw new InvalidArgumentException('Unesite OIB ili matični broj.');
         $location=$site==='ZA_SVA_PRODAJNA_MJESTA'?$site:($data['location']??'');
         if(!is_string($location)||!preg_match('/\A[\p{L}\p{N}_ -]{1,100}\z/u',$location)) throw new InvalidArgumentException('Unesite vrstu, adresu i oznaku prodajnog mjesta.');
-        [$csv,$xml]=self::encode($kind,$data['rows']??[]);
+        if(!isset($data['rows'])||!is_array($data['rows']))throw new InvalidArgumentException('Nedostaje popis artikala.');
+        [$csv,$xml]=self::encode($kind,$data['rows']);
         $db->beginTransaction();
         try {
             $stmt=$db->prepare('INSERT INTO price_heads(site_key,kind) VALUES (?,?) ON DUPLICATE KEY UPDATE site_key=site_key');$stmt->execute([$site,$kind]);
             $stmt=$db->prepare('SELECT current_id,last_version FROM price_heads WHERE site_key=? AND kind=? FOR UPDATE');$stmt->execute([$site,$kind]);$head=$stmt->fetch();
             if($head['current_id']!==null){
                 $stmt=$db->prepare('SELECT filename,csv_content,xml_content,version_no FROM price_lists WHERE id=?');$stmt->execute([$head['current_id']]);$old=$stmt->fetch();
-                if($old&&$old['csv_content']===$csv&&$old['xml_content']===$xml){$db->commit();return ['id'=>(int)$head['current_id'],'version'=>(int)$old['version_no'],'unchanged'=>true];}
+                if($old&&str_starts_with($old['filename'],$identifier.'_'.str_replace(' ','_',$location).'_'.$kind.'_')&&$old['csv_content']===$csv&&$old['xml_content']===$xml){$db->commit();return ['id'=>(int)$head['current_id'],'version'=>(int)$old['version_no'],'unchanged'=>true];}
             }
             $version=(int)$head['last_version']+1;
             $now=new DateTimeImmutable('now',new DateTimeZone('Europe/Zagreb'));

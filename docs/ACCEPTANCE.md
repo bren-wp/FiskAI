@@ -8,3 +8,6 @@
 - Room normalization, recoverable backup, backend API/MySQL/MariaDB, public site and web app: pending.
 - Original branding assets and visual regression, full security/dead-code/semantic-clone audits: pending.
 - APK/AAB: previous alpha08 CI successful; current commit requires build and instrumentation. Stable release blocked.
+
+## Alpha12
+PHP web and MySQL/MariaDB price publishing/archive foundation, KPD import/search and integration tests added. Deployment, real DZS import, Android synchronization, scheduler and legal verification still pending. No change to production fiscal lock. CI must pass before any release.
