@@ -7,7 +7,9 @@ import android.database.sqlite.SQLiteOpenHelper
 
 /** Stores authenticated ciphertext only. No destructive schema fallback. */
 internal class RecordDatabase(context: Context, databaseName: String = "fiskai_records.db") :
-    SQLiteOpenHelper(context.applicationContext, databaseName, null, 4) {
+    SQLiteOpenHelper(context.applicationContext, databaseName, null, 8) {
+
+    init { setWriteAheadLoggingEnabled(true) }
 
     companion object {
         @Volatile private var instance: RecordDatabase? = null
@@ -16,19 +18,41 @@ internal class RecordDatabase(context: Context, databaseName: String = "fiskai_r
         }
     }
 
+    override fun onConfigure(db: SQLiteDatabase) {
+        super.onConfigure(db)
+        db.setForeignKeyConstraintsEnabled(true)
+    }
+
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE records (namespace TEXT NOT NULL, record_key TEXT NOT NULL, payload TEXT NOT NULL, PRIMARY KEY(namespace,record_key))")
         db.execSQL("CREATE TABLE legacy_migration (namespace TEXT NOT NULL, record_key TEXT NOT NULL, PRIMARY KEY(namespace,record_key))")
         createCisJournal(db)
         createDemoLedger(db)
         createStock(db)
+        protectImmutableInserts(db)
+        hr.brendigo.fiskai.room.FiscalSchema.createTables { db.execSQL(it) }
+        hr.brendigo.fiskai.room.IncomingSchema.create { db.execSQL(it) }
+        hr.brendigo.fiskai.room.ReceiptSchema.create { db.execSQL(it) }
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        require(oldVersion in 1..3 && newVersion == 4)
+        require(oldVersion in 1..7 && newVersion == 8)
         if(oldVersion == 1) createCisJournal(db)
         if(oldVersion < 3) createDemoLedger(db)
-        createStock(db)
+        if(oldVersion < 4) createStock(db)
+        if(oldVersion < 5) protectImmutableInserts(db)
+        if(oldVersion < 6) hr.brendigo.fiskai.room.FiscalSchema.createTables { db.execSQL(it) }
+        hr.brendigo.fiskai.room.IncomingSchema.create { db.execSQL(it) }
+        hr.brendigo.fiskai.room.ReceiptSchema.create { db.execSQL(it) }
+        // Force Room to validate the upgraded tables before recreating its identity hash.
+        db.execSQL("DROP TABLE IF EXISTS room_master_table")
+    }
+
+    // SQLite REPLACE can delete conflicting rows without firing DELETE triggers.
+    // Abort the insert before conflict resolution, including INSERT OR REPLACE.
+    private fun protectImmutableInserts(db: SQLiteDatabase) {
+        db.execSQL("CREATE TRIGGER demo_receipt_no_replace BEFORE INSERT ON demo_receipt WHEN EXISTS(SELECT 1 FROM demo_receipt WHERE id=NEW.id OR draft_id=NEW.draft_id OR (year=NEW.year AND premise=NEW.premise AND register_no=NEW.register_no AND number=NEW.number)) BEGIN SELECT RAISE(ABORT,'Immutable test snapshot'); END")
+        db.execSQL("CREATE TRIGGER stock_event_no_replace BEFORE INSERT ON stock_event WHEN EXISTS(SELECT 1 FROM stock_event WHERE id=NEW.id) BEGIN SELECT RAISE(ABORT,'Immutable stock movement'); END")
     }
 
     private fun createCisJournal(db: SQLiteDatabase) {

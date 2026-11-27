@@ -1,0 +1,29 @@
+name: Official CIS contract acquisition
+on:
+  pull_request:
+    paths: ['scripts/fetch-fiscal-contracts.py','scripts/verify-fiscal-contracts.py','server/contracts/**','server/src/FiscalContract.php','server/src/FiscalSignature.php','server/tests/OfficialFiscalContractTest.php','server/src/FiscalResponse.php','server/tests/FiscalResponseTest.php','.github/workflows/fiscal-contracts.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  acquire:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - run: python3 scripts/fetch-fiscal-contracts.py contract-review
+      - name: Verify pinned contract bytes
+        run: python3 scripts/verify-fiscal-contracts.py contract-review
+      - name: Validate signed offline request against official XSD
+        run: |
+          set -euo pipefail
+          schema="$(find contract-review/Fiskalizacija-WSDL-EDUC_v1.10 -type f -name FiskalizacijaSchema.xsd)"
+          php server/tests/OfficialFiscalContractTest.php "$(dirname "$schema")"
+          php server/tests/FiscalResponseTest.php "$(dirname "$schema")"
+      - uses: actions/upload-artifact@v6
+        with:
+          name: FiskAI-official-contracts-unreviewed
+          path: contract-review/
+          if-no-files-found: error

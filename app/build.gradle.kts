@@ -1,3 +1,8 @@
+import org.gradle.api.file.DirectoryProperty
+import org.gradle.api.tasks.OutputDirectory
+import org.gradle.api.tasks.compile.JavaCompile
+import org.gradle.process.CommandLineArgumentProvider
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
@@ -9,8 +14,8 @@ android {
         applicationId = "hr.brendigo.fiskai"
         minSdk = 24
         targetSdk = 36
-        versionCode = 14
-        versionName = "0.1.0"
+        versionCode = 15
+        versionName = "0.1.1"
         manifestPlaceholders["appLabel"] = "FiskAI"
         buildConfigField("boolean", "DEMO_MODE", "false")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -33,7 +38,25 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.ui:ui")
     implementation("com.google.zxing:core:3.5.4")
+    implementation("androidx.room:room-runtime:2.8.4")
+    annotationProcessor("androidx.room:room-compiler:2.8.4")
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test:runner:1.7.0")
     androidTestImplementation("androidx.test.ext:junit:1.3.0")
+}
+
+abstract class RoomSchemaArguments : CommandLineArgumentProvider {
+    @get:OutputDirectory
+    abstract val schemaDirectory: DirectoryProperty
+    override fun asArguments(): Iterable<String> =
+        listOf("-Aroom.schemaLocation=" + schemaDirectory.get().asFile.absolutePath)
+}
+
+// Separate outputs per variant, no concurrent writes to the same schema file.
+tasks.withType<JavaCompile>().configureEach {
+    if (name in setOf("compileDebugJavaWithJavac", "compileDemoJavaWithJavac", "compileReleaseJavaWithJavac")) {
+        val schemaArgs = project.objects.newInstance(RoomSchemaArguments::class.java)
+        schemaArgs.schemaDirectory.set(project.layout.buildDirectory.dir("room-schemas/$name"))
+        options.compilerArgumentProviders.add(schemaArgs)
+    }
 }

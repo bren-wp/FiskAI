@@ -2,10 +2,10 @@ name: Android device and screenshots
 on:
   workflow_call:
   pull_request:
-    paths: ['app/**','*.gradle.kts','gradle.properties','.github/workflows/device.yml','scripts/capture-android.py']
+    paths: ['app/**','*.gradle.kts','gradle.properties','.github/workflows/device.yml','scripts/capture-android.py','scripts/test-capture-android.py']
   push:
     branches: [main, feature/native-alpha]
-    paths: ['app/**','*.gradle.kts','gradle.properties','.github/workflows/device.yml','scripts/capture-android.py']
+    paths: ['app/**','*.gradle.kts','gradle.properties','.github/workflows/device.yml','scripts/capture-android.py','scripts/test-capture-android.py']
 permissions:
   contents: read
 jobs:
@@ -21,9 +21,12 @@ jobs:
       - uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: '9.9.2'
+          cache-disabled: true
       - uses: android-actions/setup-android@v4.0.4
         with:
           packages: "platform-tools platforms;android-37.1 build-tools;36.0.0"
+      - name: Test screenshot selectors
+        run: python3 scripts/test-capture-android.py
       - name: Enable KVM access
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -52,3 +55,4 @@ jobs:
           path: |
             app/build/reports/androidTests/connected/
             app/build/outputs/androidTest-results/connected/
+            build/capture-diagnostics/

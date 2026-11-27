@@ -1,0 +1,114 @@
+package hr.brendigo.fiskai
+
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
+
+@Composable
+internal fun ReceiptScreen(page:String,business:BusinessProfile,onBusy:(Boolean)->Unit) {
+    val context=LocalContext.current
+    val store=remember(context){ReceiptStore(context.applicationContext)}
+    val scope=rememberCoroutineScope()
+    var data by remember{mutableStateOf(ReceiptWorkspace(emptyList(),emptyList()))}
+    var busy by remember{mutableStateOf(true)}
+    var message by remember{mutableStateOf("")}
+    var selected by remember{mutableStateOf<BankEvidence?>(null)}
+    var note by remember{mutableStateOf("")}
+    var manual by remember{mutableStateOf(false)}
+    var reference by remember{mutableStateOf("")}
+    var amount by remember{mutableStateOf("")}
+    val today=remember{SimpleDateFormat("yyyy-MM-dd",Locale.ROOT).apply{timeZone=TimeZone.getTimeZone("Europe/Zagreb")}.format(Date())}
+    var date by remember{mutableStateOf(today)}
+    var year by remember{mutableStateOf(today.take(4))}
+    fun working(value:Boolean){busy=value;onBusy(value)}
+    fun perform(action:()->String){
+        working(true)
+        scope.launch{try{
+            withContext(Dispatchers.IO){runCatching{action() to store.read()}}
+                .onSuccess{message=it.first;data=it.second;selected=null;manual=false;note=""}
+                .onFailure{message="Spremanje nije potvrđeno. Provjerite podatke, format i postojeće zapise."}
+        }finally{working(false)}}
+    }
+    val picker=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()){uri->
+        if(uri==null)working(false) else perform{
+            val bytes=context.contentResolver.openInputStream(uri)?.use(ReceiptRules::read)?:error("Missing file")
+            "Uvezeno novih stavaka: "+store.importCsv(bytes,business)
+        }
+    }
+    LaunchedEffect(store){working(true);try{
+        withContext(Dispatchers.IO){runCatching{store.read()}}.onSuccess{data=it}.onFailure{message="Evidencija nije dostupna."}
+    }finally{working(false)}}
+    val receipts=data.receipts.filter{it.owner==business.oib}
+    val banks=data.bank.filter{it.owner==business.oib}
+    val ready=validOib(business.oib)
+    Text(page,style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold)
+    if(!ready)Text("Najprije postavite OIB poslovnog subjekta.")
+    if(page=="Bankovni izvodi"){
+        Panel{
+            Text("Uvoz CSV izvoda",fontWeight=FontWeight.Bold)
+            Text("UTF-8; zaglavlje: id;datum;iban;iznos;valuta;opis. Datum GGGG-MM-DD, valuta EUR, stabilni ID bankovne transakcije. Izvoz drugih formata nije automatski prepoznat.")
+            Button(enabled=!busy&&ready&&runCatching{ReceiptRules.account(business.iban)}.isSuccess,onClick={working(true);picker.launch(arrayOf("text/csv","text/plain","application/octet-stream"))},modifier=Modifier.fillMaxWidth()){Text("Uvezi CSV")}
+            Text("Uvoz ne potvrđuje poslovni primitak. Samo pozitivne stavke možete ručno potvrditi.")
+        }
+        banks.sortedByDescending{it.date}.forEach{b->Panel{
+            Text(b.description,fontWeight=FontWeight.Bold)
+            Text(b.date+" · "+b.reference)
+            Text(euro(ReceiptRules.amount(b.cents)))
+            if(receipts.any{it.bankId==b.id})Text("Potvrđen primitak")
+            else if(b.cents>0)OutlinedButton(enabled=!busy,onClick={selected=b;note=""}){Text("Potvrdi poslovni primitak")}
+            else Text("Odljev – nije primitak")
+        }}
+        if(banks.isEmpty())Text("Nema uvezenih bankovnih stavaka.")
+    } else {
+        OutlinedTextField(year,{year=it.filter(Char::isDigit).take(4)},label={Text("Godina")},singleLine=true,modifier=Modifier.fillMaxWidth())
+        val shown=receipts.filter{it.date.startsWith(year+"-")}.sortedWith(compareBy<ReceiptEvidence>{it.date}.thenBy{it.id})
+        Panel {
+            Text("Potvrđeni primici",fontWeight=FontWeight.Bold)
+            Text(euro(ReceiptRules.amount(shown.sumOf{it.cents})),style=MaterialTheme.typography.headlineMedium)
+            Text("Gotovina: "+euro(ReceiptRules.amount(shown.filter{it.method=="CASH"}.sumOf{it.cents})))
+            Text("Transakcijski račun: "+euro(ReceiptRules.amount(shown.filter{it.method=="BANK"}.sumOf{it.cents})))
+        }
+        if(page=="Evidencija naplate")Button(enabled=!busy&&ready,onClick={manual=true;note="";reference="";date=today;amount=""},modifier=Modifier.fillMaxWidth()){Text("Evidentiraj gotovinski primitak")}
+        else Text("Radni pregled za pripremu KPR-a, nije službeni obrazac. Porezni tretman i korekcije potrebno je provjeriti.")
+        shown.forEachIndexed{i,row->Panel{
+            Text((i+1).toString()+". "+row.date+" · "+row.reference,fontWeight=FontWeight.Bold)
+            Text(row.note);Text(if(row.method=="CASH")"Gotovina" else "Transakcijski račun")
+            Text(euro(ReceiptRules.amount(row.cents)))
+        }}
+        if(shown.isEmpty())Text("Nema potvrđenih primitaka za odabranu godinu.")
+    }
+    if(busy)LinearProgressIndicator(Modifier.fillMaxWidth())
+    if(message.isNotEmpty())Text(message)
+    selected?.let{row->AlertDialog(onDismissRequest={if(!busy)selected=null},title={Text("Potvrda poslovnog primitka")},text={
+        Column(verticalArrangement=Arrangement.spacedBy(8.dp)){
+            Text(euro(ReceiptRules.amount(row.cents))+" · "+row.date)
+            Text("Potvrdite samo stvarni poslovni primitak. Vlastiti prijenosi i zajmovi ne knjiže se automatski. Zapis je nepromjenjiv.")
+            OutlinedTextField(note,{note=it.take(512)},label={Text("Dokaz / namjena")})
+        }
+    },confirmButton={TextButton(enabled=!busy&&note.isNotBlank(),onClick={val evidence=note;perform{if(store.confirmBank(business,row.id,evidence))"Primitak je evidentiran." else "Primitak je već evidentiran."}}){Text("Potvrdi")}},dismissButton={TextButton(enabled=!busy,onClick={selected=null}){Text("Odustani")}})}
+    if(manual)AlertDialog(onDismissRequest={if(!busy)manual=false},title={Text("Gotovinski primitak")},text={
+        Column(verticalArrangement=Arrangement.spacedBy(4.dp)){
+            Text("Unesite stvarno primljeni iznos i jedinstvenu oznaku dokaza. Ovaj zapis nije fiskalni račun i ne može se mijenjati.")
+            OutlinedTextField(reference,{reference=it.take(128)},label={Text("Oznaka dokaza")},singleLine=true)
+            OutlinedTextField(date,{date=it.take(10)},label={Text("Datum GGGG-MM-DD")},singleLine=true)
+            OutlinedTextField(amount,{amount=it.take(16)},label={Text("Iznos EUR")},singleLine=true)
+            OutlinedTextField(note,{note=it.take(512)},label={Text("Opis / dokaz")})
+        }
+    },confirmButton={TextButton(enabled=!busy&&reference.isNotBlank()&&amount.isNotBlank()&&note.isNotBlank(),onClick={
+        val ref=reference;val day=date;val value=amount;val proof=note
+        perform{if(store.cash(business,ref,day,value,proof))"Primitak je evidentiran." else "Primitak je već evidentiran."}
+    }){Text("Potvrdi")}},dismissButton={TextButton(enabled=!busy,onClick={manual=false}){Text("Odustani")}})
+}

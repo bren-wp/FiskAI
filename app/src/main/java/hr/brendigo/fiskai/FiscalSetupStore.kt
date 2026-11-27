@@ -6,8 +6,9 @@ import org.json.JSONObject
 
 internal class FiscalSetupStore(context: Context) {
     private val records = SecureRecords(context,"fiskai_fiscal_setup")
-    fun read(): FiscalSetup {
-        val root = JSONObject(records.getString("settings","{}"))
+    fun read(): FiscalSetup = decode(JSONObject(records.getString("settings","{}")))
+    companion object {
+    internal fun decode(root: JSONObject): FiscalSetup {
         fun <T> readArray(key: String, decode: (JSONObject) -> T): List<T> {
             val a = root.optJSONArray(key) ?: JSONArray()
             return List(a.length()) { decode(a.getJSONObject(it)) }
@@ -21,6 +22,7 @@ internal class FiscalSetupStore(context: Context) {
         readArray("operators") { Operator(it.getString("code"),it.getString("name"),it.getString("oib")) }
             .forEach { result = result.withOperator(it) }
         return result
+    }
     }
     fun save(value: FiscalSetup): Boolean {
         val p = JSONArray(); val r = JSONArray(); val o = JSONArray()

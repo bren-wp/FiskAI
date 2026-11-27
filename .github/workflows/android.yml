@@ -17,10 +17,15 @@ jobs:
       - uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: '9.9.2'
+          cache-disabled: true
       - uses: android-actions/setup-android@v4.0.4
         with:
           packages: "platform-tools platforms;android-37.1 build-tools;36.0.0"
       - run: gradle --stacktrace :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:bundleDebug :app:assembleDemo :app:bundleRelease
+      - name: Test screenshot selectors
+        run: python3 scripts/test-capture-android.py
+      - name: Verify generated Room schemas
+        run: python3 scripts/check-room-schema.py app/build/room-schemas
       - uses: actions/upload-artifact@v6
         with:
           name: FiskAI-build
@@ -30,3 +35,4 @@ jobs:
             app/build/outputs/bundle/debug/*.aab
             app/build/outputs/apk/demo/*.apk
             app/build/outputs/bundle/release/*.aab
+            app/build/room-schemas/**/*.json

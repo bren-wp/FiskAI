@@ -1,12 +1,17 @@
-name: FiskAI 0.1.0 packages
+name: FiskAI release candidate packages
 on:
-  push:
-    branches: [feature/native-alpha]
-    paths: ['app/**','server/**','web/**','brending/**','*.gradle.kts','.github/workflows/**']
+  pull_request:
+    paths: ['app/**','server/**','web/**','brending/**','scripts/**','*.gradle.kts','.github/workflows/**']
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Objavi tehničko testno izdanje nakon provjere svih priloga'
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
-  group: fiskai-release-0-1-0
+  group: fiskai-release-${{ github.ref }}
   cancel-in-progress: false
 jobs:
   web:
@@ -24,13 +29,14 @@ jobs:
       - uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: '9.9.2'
+          cache-disabled: true
       - uses: android-actions/setup-android@v4.0.4
         with:
           packages: "platform-tools platforms;android-37.1 build-tools;36.0.0"
       - name: Build and verify packages
         run: |
           set -euo pipefail
-          grep -F 'versionName = "0.1.0"' app/build.gradle.kts
+          grep -E 'versionName = "[0-9]+\.[0-9]+\.[0-9]+"' app/build.gradle.kts
           gradle --stacktrace :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDemo :app:bundleRelease
           mkdir -p dist
           cp app/build/outputs/apk/debug/app-debug.apk dist/FiskAI.apk
@@ -41,39 +47,78 @@ jobs:
           if unzip -Z1 dist/FiskAI-unsigned.aab | grep -Ei '^META-INF/[^/]+\.(RSA|DSA|EC|SF)$'; then
             echo "Expected unsigned AAB"; exit 1
           fi
-          git archive --format=zip --prefix=FiskAI-0.1.0/ HEAD > dist/FiskAI-0.1.0-source.zip
-          (cd dist && sha256sum *.apk *.aab *.zip > SHA256SUMS.txt)
+          gradle --no-configuration-cache -I scripts/runtime-sbom.init.gradle :app:fiskaiRuntimeSbom
+          python3 scripts/check-room-schema.py app/build/room-schemas
+          cp app/build/room-schemas/compileReleaseJavaWithJavac/hr.brendigo.fiskai.room.FiscalRoomDatabase/8.json dist/FiskAI-room-schema.json
+          python3 scripts/package-source.py dist
+          cp docs/THIRD_PARTY.md dist/THIRD_PARTY.md
+          cp server/README.md dist/INSTALLATION.md
+          cp CHANGELOG.md dist/CHANGELOG.md
+          (cd dist && sha256sum *.apk *.aab *.zip *.md *.json > SHA256SUMS.txt)
       - uses: actions/upload-artifact@v6
         with:
-          name: FiskAI-0.1.0-packages
+          name: FiskAI-candidate-packages
           path: dist/
           if-no-files-found: error
-  publish:
+  assemble-candidate:
     needs: [web,device,package]
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - uses: actions/download-artifact@v8
         with:
-          name: FiskAI-0.1.0-packages
+          name: FiskAI-candidate-packages
           path: dist
       - uses: actions/download-artifact@v8
         with:
           name: FiskAI-real-screenshots-api36
-          path: screenshots
-      - name: Publish verified test packages
+          path: capture/android
+      - name: Verify and assemble candidate
+        run: |
+          set -euo pipefail
+          (cd dist && sha256sum -c SHA256SUMS.txt)
+          for platform in web admin; do
+            if [ -d "screenshots/actual/$platform" ]; then
+              mkdir -p "capture/$platform"
+              find "screenshots/actual/$platform" -maxdepth 1 -type f -name '*.png' -exec cp -- {} "capture/$platform/" \\;
+            fi
+          done
+          (cd capture && zip -qr ../dist/FiskAI-screenshots.zip . -i '*.png')
+          (cd dist && unzip -tq FiskAI-screenshots.zip && sha256sum *.apk *.aab *.zip *.md *.json > SHA256SUMS.txt && sha256sum -c SHA256SUMS.txt)
+      - uses: actions/upload-artifact@v6
+        with:
+          name: FiskAI-verified-candidate
+          path: dist/
+          if-no-files-found: error
+  publish:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish == true
+    needs: [assemble-candidate]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
+        with:
+          name: FiskAI-verified-candidate
+          path: dist
+      - name: Verify complete artifacts and publish technical test release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          if gh release view v0.1.0 >/dev/null 2>&1; then
-            echo "Release already exists; no replacement"; exit 0
+          python3 scripts/check-release.py dist
+          current="$(gh api "repos/$GH_REPO/git/ref/heads/main" --jq .object.sha)"
+          test "$current" = "$GITHUB_SHA"
+          version="$(sed -nE 's/^[[:space:]]*versionName = "([0-9]+\.[0-9]+\.[0-9]+)"$/\1/p' app/build.gradle.kts)"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          if gh release view "v$version" >/dev/null 2>&1; then
+            echo "Release already exists; will not replace published assets"
+            exit 1
           fi
-          current="$(gh api "repos/$GH_REPO/git/ref/heads/feature/native-alpha" --jq .object.sha)"
-          if [ "$current" != "$GITHUB_SHA" ]; then echo "Newer commit exists; skip outdated release"; exit 0; fi
-          (cd dist && sha256sum -c SHA256SUMS.txt)
-          (cd screenshots && zip -q ../dist/FiskAI-real-screenshots.zip *.png)
-          (cd dist && sha256sum *.apk *.aab *.zip > SHA256SUMS.txt)
-          gh release create v0.1.0 dist/* --target "$GITHUB_SHA" --prerelease --title "FiskAI 0.1.0 — testno izdanje" --notes "Verificirani paketi za testiranje. APK i demo.apk potpisani su testnim ključem, release AAB nije potpisan. Fiskalizacija i eRačuni nisu odobreni za produkciju. Ne koristiti stvarne poslovne podatke. Izvorni kod i stvarne snimke emulatora priloženi."
+          gh release create "v$version" dist/* --target "$GITHUB_SHA" --prerelease --title "FiskAI $version — testno izdanje" --notes "Tehnički provjereni testni paketi. APK koristi testni potpis; release AAB nije potpisan. Fiskalizacija, eRačuni i zakonska produkcijska spremnost nisu potvrđeni. Ne koristiti stvarne poslovne podatke."
