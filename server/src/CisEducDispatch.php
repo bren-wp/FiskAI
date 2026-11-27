@@ -18,6 +18,14 @@ final class CisEducDispatch {
         try{$result=$work();$this->db->commit();return $result;}
         catch(Throwable $e){if($this->db->inTransaction())$this->db->rollBack();throw $e;}
     }
+    private function audit(string $message,string $event):void {
+        if(!$this->db->inTransaction())throw new LogicException('Audit requires transaction.');
+        $actor=getenv('FISKAI_CIS_OPERATOR_ID');
+        if($actor===false)$actor='local-cli';
+        if(!preg_match('/\A[A-Za-z0-9_.-]{1,64}\z/D',$actor))throw new InvalidArgumentException('Invalid operator identifier.');
+        $s=$this->db->prepare('INSERT INTO cis_educ_dispatch_audit(message_id,event_type,actor,recorded_at) VALUES (?,?,?,UTC_TIMESTAMP(6))');
+        $s->execute([$message,$event,$actor]);
+    }
     private function row(string $subject,string $message,bool $lock=false):array {
         $s=$this->db->prepare('SELECT d.*,e.document_sha256,e.trust_sha256,e.key_id,e.request_sha256 AS evidence_request,e.response_sha256 AS evidence_response,e.verified_at AS evidence_verified_at,e.jir AS evidence_jir FROM cis_educ_dispatch d JOIN cis_educ_response_evidence e ON e.message_id=d.message_id AND e.subject_id=d.subject_id AND e.document_id=d.document_id WHERE d.subject_id=? AND d.message_id=?'.($lock?' FOR UPDATE':''));
         $s->execute([$subject,$message]);$row=$s->fetch(PDO::FETCH_ASSOC);
@@ -54,9 +62,11 @@ final class CisEducDispatch {
             $s=$this->db->prepare("INSERT INTO cis_educ_dispatch(message_id,subject_id,document_id,signer_sha256,request_sha256,sealed_request,state,updated_at)
                 VALUES (?,?,?,?,?,?,'PREPARED',UTC_TIMESTAMP(6)) ON DUPLICATE KEY UPDATE message_id=message_id");
             $s->execute([$message,$subject,$document,$signerPin,$p['requestSha256'],base64_encode($nonce.$tag.$cipher)]);
+            $created=$s->rowCount()===1;
             $stored=$this->row($subject,$message,true);
             if($stored['state']==='PREPARED'&&self::hasResponse($stored))throw new DomainException('Response already recorded; dispatch requires reconciliation.');
             if(!hash_equals($p['soap'],self::decrypt($stored,$storageKey)))throw new DomainException('Conflicting request.');
+            if($created)$this->audit($message,'PREPARED');
             return $message;
         });
     }
@@ -78,17 +88,31 @@ final class CisEducDispatch {
             $s=$this->db->prepare("UPDATE cis_educ_dispatch SET state='RESERVED',reservation_sha256=?,reserved_at=UTC_TIMESTAMP(6),updated_at=UTC_TIMESTAMP(6) WHERE message_id=? AND subject_id=? AND state='PREPARED'");
             $s->execute([hash('sha256',$token),$message,$subject]);
             if($s->rowCount()!==1)throw new RuntimeException('Reservation lost.');
+            $this->audit($message,'RESERVED');
             return ['reservation'=>$token,'soap'=>$soap,'requestSha256'=>$r['request_sha256']];
         });
     }
     /** Explicit recovery. A previously reserved request can never automatically be sent again. */
     public function recoverInterrupted(string $subject):int {
-        $s=$this->db->prepare("UPDATE cis_educ_dispatch SET state='UNCERTAIN',updated_at=UTC_TIMESTAMP(6) WHERE subject_id=? AND state='RESERVED' AND reserved_at<=UTC_TIMESTAMP(6)-INTERVAL 5 MINUTE");
-        $s->execute([$subject]);return $s->rowCount();
+        return $this->transaction(function()use($subject){
+            $s=$this->db->prepare("SELECT message_id FROM cis_educ_dispatch WHERE subject_id=? AND state='RESERVED' AND reserved_at<=UTC_TIMESTAMP(6)-INTERVAL 5 MINUTE ORDER BY message_id LIMIT 100 FOR UPDATE");
+            $s->execute([$subject]);$ids=$s->fetchAll(PDO::FETCH_COLUMN);
+            $update=$this->db->prepare("UPDATE cis_educ_dispatch SET state='UNCERTAIN',updated_at=UTC_TIMESTAMP(6) WHERE subject_id=? AND message_id=? AND state='RESERVED'");
+            foreach($ids as $id){
+                $update->execute([$subject,$id]);
+                if($update->rowCount()!==1)throw new RuntimeException('Recovery transition lost.');
+                $this->audit($id,'UNCERTAIN');
+            }
+            return count($ids);
+        });
     }
     public function uncertain(string $subject,string $message,string $reservation):bool {
-        $s=$this->db->prepare("UPDATE cis_educ_dispatch SET state='UNCERTAIN',updated_at=UTC_TIMESTAMP(6) WHERE subject_id=? AND message_id=? AND state='RESERVED' AND reservation_sha256=?");
-        $s->execute([$subject,$message,hash('sha256',$reservation)]);return $s->rowCount()===1;
+        return $this->transaction(function()use($subject,$message,$reservation){
+            $s=$this->db->prepare("UPDATE cis_educ_dispatch SET state='UNCERTAIN',updated_at=UTC_TIMESTAMP(6) WHERE subject_id=? AND message_id=? AND state='RESERVED' AND reservation_sha256=?");
+            $s->execute([$subject,$message,hash('sha256',$reservation)]);
+            if($s->rowCount()!==1)return false;
+            $this->audit($message,'UNCERTAIN');return true;
+        });
     }
     /** Operator-controlled EDUC send. Failure after reservation is always ambiguous. */
     public function dispatchAuthorized(string $subject,string $message,OpenSSLCertificate $signer,
@@ -136,6 +160,7 @@ final class CisEducDispatch {
             $s=$this->db->prepare("UPDATE cis_educ_dispatch SET state='VERIFIED',updated_at=UTC_TIMESTAMP(6) WHERE subject_id=? AND message_id=? AND state IN ('RESERVED','UNCERTAIN')");
             $s->execute([$r['subject_id'],$r['message_id']]);
             if($s->rowCount()!==1)throw new RuntimeException('Verification transition lost.');
+            $this->audit($r['message_id'],'VERIFIED');
         }
         return $jir;
     }
