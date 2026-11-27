@@ -1,6 +1,7 @@
 # Promjene
 
 ## 0.1.1 — kandidat (nije objavljeno)
+- Room DAO atomska lokalna alokacija broja, dokumenta i outboxa s migracijskim pragom, idempotencijom i testovima rollbacka. Aktivni cutover nije uključen.
 - Prva Room integracija: lokalna priprema DEMO dokumenta i trajni outbox, transakcijski upis, jedinstveni identitet, CAS claim, UNCERTAIN oporavak i nepromjenjivost; bez mrežnog slanja.
 - Nedestruktivna SQLite migracija v4→v5: zabrana INSERT OR REPLACE nad nepromjenjivim dnevnicima; broj i godina novog DEMO računa te novo stanje zaliha i vrijeme dio su autentificiranog šifriranog zapisa.
 - Backup sadržaj v2: DEMO računi i sekvence, stanje i kretanje zaliha, CIS testni dnevnik, provjera kontinuiteta brojeva i salda, kompatibilnost uvoza v1.
