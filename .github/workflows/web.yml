@@ -1,0 +1,17 @@
+name: Web
+on:
+  pull_request:
+    paths: ['web/**','.github/workflows/web.yml']
+  push:
+    branches: [main, feature/native-alpha]
+    paths: ['web/**','.github/workflows/web.yml']
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: php -v && php -m
+      - run: find web -name '*.php' -print0 | xargs -0 -n1 php -l
+      - run: php web/tests/PriceListsTest.php

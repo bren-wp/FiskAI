@@ -1,5 +1,5 @@
-# Alpha11 acceptance status
+# Alpha12 acceptance status
 
-Added KPD shape validation and draft/snapshot preservation, separate retail/base-price entry with evidence and date, history of changed retail values and logical product archive. Added tests, vector branding and a Croatian product README; original PNG files and actual app screenshots not imported yet. No official KPD dataset or public price publication, no legal compliance claim.
+New web foundation: PHP public page, read-only public price-list and KPD APIs, token-protected synchronous price publication, transactional MySQL/MariaDB schema, CSV/XML serialization and 15-day archive access, official DZS JSON import script and KPD search, PHP unit tests and separate CI. No live server or DB test, actual KPD import, Android sync, automated scheduling or legal certification yet.
 
-All alpha10 fiscal acceptance gates remain in docs/ACCEPTANCE.md. No production issuance, verified XML contracts, XMLDSig/JIR, F2, Room, backup, web, visual acceptance or release. New CI pending.
+All remaining fiscal requirements, provider authorization, Room, POS, warehouse, HUB3/EPC, KPR/PO-SD, web administration, branding and device tests remain gates. No production issuance or stable release.
