@@ -9,7 +9,7 @@ import androidx.room.PrimaryKey;
 @Entity(tableName="demo_payment_preparation",foreignKeys={
     @ForeignKey(entity=ReceiptEventRow.class,parentColumns="id",childColumns="receiptId",onDelete=ForeignKey.RESTRICT,onUpdate=ForeignKey.RESTRICT),
     @ForeignKey(entity=FiscalDocument.class,parentColumns="id",childColumns="documentId",onDelete=ForeignKey.RESTRICT,onUpdate=ForeignKey.RESTRICT)
-},indices={@Index(value={"documentId"},unique=true),@Index(value={"eventId"},unique=true)})
+},indices={@Index(value={"documentId"}),@Index(value={"eventId"},unique=true)})
 public class PaymentPreparationRow {
     @PrimaryKey @NonNull public String receiptId="";
     @NonNull public String documentId="";
