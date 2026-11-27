@@ -68,7 +68,7 @@ internal fun WorkspaceBackupScreen(onBusy:(Boolean)->Unit,onRestored:()->Unit) {
     Text("Sigurnosna kopija radnog prostora",style=MaterialTheme.typography.headlineSmall)
     Panel {
         Text("Kopija obuhvaća nacrte, kupce, dobavljače, artikle, poslovni subjekt i fiskalne postavke.")
-        Text("Uključuje DEMO račune i brojače, stanje i povijest zaliha te CIS testni dnevnik. Uključuje i lokalne Room statuse zahtjeva. Certifikati i privatni ključevi nisu uključeni. Ne pokrećite istu obnovljenu kopiju na više uređaja.")
+        Text("Uključuje DEMO račune i brojače, stanje i povijest zaliha te CIS testni dnevnik. Uključuje ulazne eRačune, bankovne stavke, evidenciju primitaka i lokalne Room statuse zahtjeva. Certifikati i privatni ključevi nisu uključeni. Ne pokrećite istu obnovljenu kopiju na više uređaja.")
         Text("Vraćanje je moguće samo u prazan radni prostor iste vrste aplikacije (DEMO ili redovna). Postojeći podaci neće biti prepisani.")
         if(Build.VERSION.SDK_INT<26) {
             Text("Prijenosna kopija zahtijeva Android 8 ili noviji.")

@@ -37,11 +37,13 @@ class RecordMigrationInstrumentedTest {
             old.execSQL("DROP TABLE fiscal_cutover")
             old.execSQL("DROP TABLE incoming_invoice")
             old.execSQL("DROP TABLE incoming_cutover")
+            old.execSQL("DROP TABLE receipt_event")
+            old.execSQL("DROP TABLE bank_transaction")
             old.version=4
             db.close()
             db=RecordDatabase(context,name)
             val sql=db.writableDatabase
-            assertEquals(7,sql.version)
+            assertEquals(8,sql.version)
             assertEquals(encrypted,db.read(ns,"drafts"))
             assertEquals("[1]",SecureRecords(context,ns,db).getString("drafts","[]"))
             assertEquals(10000L,Inventory(context,db).balance()[product.id]!!)

@@ -33,13 +33,16 @@ internal class SecureRecords(
             BackupRecord("fiskai_directory","products","[]"),
             BackupRecord("fiskai_business","profile","{}"),
             BackupRecord("fiskai_fiscal_setup","settings","{}"),
-            BackupRecord("fiskai_incoming","invoices","[]")
+            BackupRecord("fiskai_incoming","invoices","[]"),
+            BackupRecord("fiskai_receipts","bank","[]"),
+            BackupRecord("fiskai_receipts","events","[]")
         )
 
         internal fun exportWorkspace(context:Context,database:RecordDatabase=RecordDatabase.shared(context)):String = synchronized(lock) {
             val records=org.json.JSONObject()
+            val receiptExport=ReceiptStore.export(context,database,database.readableDatabase)
             for(item in backupRecords) {
-                val value=if(item.namespace=="fiskai_incoming")IncomingInvoiceStore.exportArray(context,database).toString() else SecureRecords(context,item.namespace,database).getString(item.name,item.empty)
+                val value=if(item.id==ReceiptStore.BANK)receiptExport.first.toString() else if(item.id==ReceiptStore.EVENTS)receiptExport.second.toString() else if(item.namespace=="fiskai_incoming")IncomingInvoiceStore.exportArray(context,database).toString() else SecureRecords(context,item.namespace,database).getString(item.name,item.empty)
                 records.put(item.id,org.json.JSONTokener(value).nextValue())
             }
             val sql=database.writableDatabase
@@ -68,7 +71,9 @@ internal class SecureRecords(
             val payload=root.getJSONObject("records")
             // Earlier backups lack the incoming-invoice collection.
             if(!payload.has("fiskai_incoming/invoices"))payload.put("fiskai_incoming/invoices",org.json.JSONArray())
+            for(key in listOf(ReceiptStore.BANK,ReceiptStore.EVENTS))if(!payload.has(key))payload.put(key,org.json.JSONArray())
             require(payload.keys().asSequence().toSet()==backupRecords.map { it.id }.toSet())
+            ReceiptStore.validate(payload.getJSONArray(ReceiptStore.BANK),payload.getJSONArray(ReceiptStore.EVENTS))
             val incoming=backupRecords.map { item ->
                 val value=payload.get(item.id)
                 require(if(item.empty=="[]") value is org.json.JSONArray else value is org.json.JSONObject)
@@ -82,7 +87,7 @@ internal class SecureRecords(
             // Migrate old preferences first, so an unmigrated existing record cannot be overwritten.
             for((item,target,_) in incoming) {
                 if(item.namespace=="fiskai_incoming")require(IncomingInvoiceStore.exportArray(context,database).length()==0)
-                else require(target.getString(item.name,item.empty)==item.empty)
+                else if(item.namespace!="fiskai_receipts")require(target.getString(item.name,item.empty)==item.empty)
             }
             val certificate=SecureRecords(context,"fiskai_test_certificate",database)
             require(certificate.getString("credential","{}")=="{}")
@@ -97,8 +102,9 @@ internal class SecureRecords(
                 sql.query("records",arrayOf("namespace","record_key"),null,null,null,null,null).use { cursor ->
                     while(cursor.moveToNext()) require(backupRecords.any { it.namespace==cursor.getString(0)&&it.name==cursor.getString(1) })
                 }
-                for((item,encrypted) in sealed) if(item.namespace!="fiskai_incoming")database.write(item.namespace,item.name,encrypted)
+                for((item,encrypted) in sealed) if(item.namespace !in setOf("fiskai_incoming","fiskai_receipts"))database.write(item.namespace,item.name,encrypted)
                 IncomingInvoiceStore.restoreArray(context,database,sql,payload.getJSONArray("fiskai_incoming/invoices"))
+                ReceiptStore.restore(context,database,sql,payload.getJSONArray(ReceiptStore.BANK),payload.getJSONArray(ReceiptStore.EVENTS))
                 if(journals!=null)ledger.restore(sql,journals)
                 if(version==3||FiscalCutover.active(sql))FiscalCutover.populate(context,database,sql,queues)
                 sql.setTransactionSuccessful()
