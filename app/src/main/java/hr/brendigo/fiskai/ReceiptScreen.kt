@@ -220,7 +220,7 @@ internal fun ReceiptScreen(page:String,business:BusinessProfile,onBusy:(Boolean)
                     val snapshot=org.json.JSONObject(document.snapshot)
                     Text(document.number,fontWeight=FontWeight.Bold)
                     Text(snapshot.optString("customer").take(120))
-                    Text(euro(snapshot.optString("total")))
+                    Text(snapshot.optString("total").take(32)+" EUR")
                     Text((documentIndex+1).toString()+" / "+documents.size)
                     Row(horizontalArrangement=Arrangement.spacedBy(4.dp)){
                         TextButton(enabled=documentIndex>0,onClick={documentIndex--}){Text("Prethodni")}
