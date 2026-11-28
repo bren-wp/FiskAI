@@ -20,7 +20,7 @@ Sljedeći koraci: automatski cross-platform parity test svih odluka, povijest po
 
 ## Jedinstveni katalog pravila
 
-`server/contracts/legal-rules.json` je izvor za generirane Kotlin i PHP tablice, koje oba enginea koriste. `python3 scripts/check-legal-catalog.py --write` reproducira tablice; bez `--write` CI odbija odstupanje. Katalog trenutno podržava cijele kalendarske godine, ne unutar-godišnje promjene ili arhivu više revizija iste godine. Te mogućnosti i trajna pohrana odluka uz izdane dokumente ostaju otvorene. Testovi enginea i dalje su potrebni za provjeru ponašanja izvan same tablice.
+`server/contracts/legal-rules.json` je izvor za generirane Kotlin i PHP tablice, koje oba enginea koriste. `python3 scripts/check-legal-catalog.py --write` reproducira tablice; bez `--write` CI odbija odstupanje. Katalog koristi ISO datumske intervale s uključenim početkom i isključenim završetkom. Više vremenski razdvojenih revizija unutar godine je podržano, uz jedinstvenu verziju; preklapanje, nevaljani datumi i pogrešan redoslijed blokiraju generiranje. Praznine ne nasljeđuju prethodno pravilo. Postojeće verzije 2026. i 2027. zadržavaju isti obuhvat i identifikatore; sintetički testovi novih intervala nisu nova zakonska pravila. Trajna pohrana odluka uz izdane dokumente i zaštita od retroaktivne izmjene kataloga ostaju otvorene. Testovi enginea i dalje su potrebni za provjeru ponašanja izvan same tablice.
 
 ## Povijest poreznog statusa
 

@@ -9,7 +9,7 @@ internal object FiscalReportingRules {
     fun deadline(event: Event, date: String, selfBilled: Boolean = false): Deadline {
         val year = LegalCompliance.validateDate(date)
         require(!selfBilled || event == Event.ARTICLE_51_SUPPLY)
-        if (LegalRuleCatalog.rules[year] == null) return Deadline(DeadlineKind.REVIEW_REQUIRED)
+        if (LegalRuleCatalog.resolve(date) == null) return Deadline(DeadlineKind.REVIEW_REQUIRED)
         return when(event) {
             Event.PAYMENT, Event.REJECTION -> {
                 val month = date.substring(5, 7).toInt()

@@ -9,8 +9,7 @@ final class FiscalReportingRules {
         if (!in_array($event,['PAYMENT','REJECTION','ARTICLE_51_SUPPLY','ISSUED','SELF_BILLED','RECEIVED','TECHNICAL_INTERRUPTION'],true)
             || ($selfBilled && $event!=='ARTICLE_51_SUPPLY')) throw new InvalidArgumentException('Invalid reporting event.');
         $year=(int)substr($date,0,4);
-        $rules=require __DIR__.'/LegalRuleCatalog.php';
-        if (!isset($rules[$year])) return self::result('REVIEW_REQUIRED');
+        if (LegalCompliance::ruleForDate($date) === null) return self::result('REVIEW_REQUIRED');
         if (in_array($event,['PAYMENT','REJECTION'],true)) {
             $month=(int)substr($date,5,2);
             return self::result('MONTHLY_STATUTORY_DATE',sprintf('%04d-%02d-20',$month===12?$year+1:$year,$month===12?1:$month+1));

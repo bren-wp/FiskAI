@@ -12,15 +12,28 @@ final class LegalCompliance {
         }
     }
 
+    /** Resolve a validated ISO date in a half-open interval; gaps fail closed. */
+    public static function ruleForDate(string $date): ?array {
+        self::validateDate($date);
+        static $rules = null;
+        $rules ??= require __DIR__.'/LegalRuleCatalog.php';
+        $match = null;
+        foreach ($rules as $rule) {
+            if ($date >= $rule['from'] && $date < $rule['until']) {
+                if ($match !== null) throw new LogicException('Overlapping legal rules.');
+                $match = $rule;
+            }
+        }
+        return $match;
+    }
+
     public static function evaluate(string $date, string $subject, string $scope): array {
         self::validateDate($date);
         if (!in_array($subject,['VAT','NON_VAT_COVERED','UNKNOWN'],true)
             || !in_array($scope,['STANDARD_DOMESTIC_B2B','UNRESOLVED'],true)) {
             throw new InvalidArgumentException('Invalid legal context.');
         }
-        static $rules = null;
-        $rules ??= require __DIR__.'/LegalRuleCatalog.php';
-        $rule = $rules[(int)substr($date,0,4)] ?? null;
+        $rule = self::ruleForDate($date);
         $version = $rule['version'] ?? null;
         $issue = $receive = 'REVIEW_REQUIRED';
         if ($version !== null && $scope === 'STANDARD_DOMESTIC_B2B' && $subject !== 'UNKNOWN') {

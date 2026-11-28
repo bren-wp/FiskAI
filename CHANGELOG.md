@@ -30,3 +30,8 @@
 ## 0.1.0 — 27.11.2026.
 - Testni APK, DEMO APK, nepotpisani AAB, izvorni kod i snimke emulatora.
 - Fiskalizacija i eRačuni nisu verificirani za stvarno poslovanje.
+
+### Zakonski katalog — datumski intervali
+
+- Kotlin i PHP koriste zajednički katalog s početkom uključivo i završetkom isključivo. Podržane su odvojene revizije unutar iste godine; praznine zahtijevaju pregled. Postojeća pravila i identifikatori 2026./2027. ostaju nepromijenjeni.
+- Dodani su sintetički regresijski testovi strukture kataloga; produkcijsko odobrenje nije dodano.

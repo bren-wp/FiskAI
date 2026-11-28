@@ -23,7 +23,9 @@ jobs:
           packages: "platform-tools platforms;android-37.1 build-tools;36.0.0"
       - run: gradle --stacktrace :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:bundleDebug :app:assembleDemo :app:bundleRelease
       - name: Verify shared legal rule catalog
-        run: python3 scripts/check-legal-catalog.py
+        run: |
+          python3 scripts/check-legal-catalog.py
+          python3 scripts/test-legal-catalog.py
       - name: Test screenshot selectors
         run: python3 scripts/test-capture-android.py
       - name: Verify generated Room schemas
