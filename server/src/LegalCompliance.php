@@ -28,12 +28,15 @@ final class LegalCompliance {
     }
 
     public static function evaluate(string $date, string $subject, string $scope): array {
-        self::validateDate($date);
+        return self::evaluateResolved(self::ruleForDate($date),$subject,$scope);
+    }
+
+    /** Internal shared evaluator; callers must resolve a validated, trusted catalog first. */
+    public static function evaluateResolved(?array $rule,string $subject,string $scope):array {
         if (!in_array($subject,['VAT','NON_VAT_COVERED','UNKNOWN'],true)
             || !in_array($scope,['STANDARD_DOMESTIC_B2B','UNRESOLVED'],true)) {
             throw new InvalidArgumentException('Invalid legal context.');
         }
-        $rule = self::ruleForDate($date);
         $version = $rule['version'] ?? null;
         $issue = $receive = 'REVIEW_REQUIRED';
         if ($version !== null && $scope === 'STANDARD_DOMESTIC_B2B' && $subject !== 'UNKNOWN') {

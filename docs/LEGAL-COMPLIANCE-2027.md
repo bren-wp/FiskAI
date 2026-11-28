@@ -181,3 +181,7 @@ Android: novi DEMO payment preparation zapisi u postojećoj Room tablici čuvaju
 ### Read-only HTTPS regulatorni witness
 
 Dodano je zasebno read-only TLS sučelje `scripts/regulatory-witness-https.py` (operator append ostaje CLI) i PHP `RegulatoryRemoteCheckpoint::requireFresh`. Svaki zahtjev generira novi 256-bitni nonce, provjerava TLS CA, SPKI pin i regulatorni javni ključ, zabranjuje redirect i proxy te ograničava odgovor. Konfiguracija: FISKAI_REGULATORY_WITNESS_URL, FISKAI_REGULATORY_PUBLIC_KEY_FILE, FISKAI_REGULATORY_PUBLIC_KEY_SHA256, FISKAI_REGULATORY_WITNESS_TLS_SPKI, FISKAI_REGULATORY_WITNESS_CA, FISKAI_REGULATORY_WITNESS_CA_SHA256, FISKAI_REGULATORY_WITNESS_TOKEN_FILE. Test koristi privremene ključeve i loopback HTTPS, ne stvarni produkcijski host. Nije još integrirano kao obvezni gate svih zakonskih odluka. Rollback samog neovisnog hosta ostaje izvan ovog modela.
+
+### Povijesno razrješavanje odluka
+
+`HistoricalLegalDecisionResolver` provjerava potpis cijele povijesti i neovisni latest checkpoint te zahtijeva izričiti redni broj i SHA-256 kataloga za povijesnu procjenu. Podržava samo postojeću usku shemu domaćeg B2B pravila i odbija nepoznate sheme, neispravne intervale i nepodudarne otiske. PHP evaluator dijele aktivno i povijesno razrješavanje. Sintetički test različitih revizija nije zakonska tvrdnja. Nije još integrirano u sve evidencije: postojeći F2 zapisi nemaju obvezni identitet revizije kataloga i ne dopunjuju se retroaktivno. Android resolver i zaseban Room ledger ostaju otvoreni.
