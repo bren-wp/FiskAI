@@ -32,6 +32,19 @@ class DiscoveryTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             d["changes"](old,current)
 
+    def test_metadata_routing(self):
+        eli=d["ELI"]+"2026/97/1181"
+        def api(endpoint,payload):
+            self.assertEqual(endpoint,"act")
+            self.assertEqual(payload["act_num"],"1181")
+            return [{"@id":eli+"/hrv","http://data.europa.eu/eli/ontology#title":[{"@value":"Pravilnik o fiskalizaciji računa"}]}]
+        row=d["metadata"](eli,api)
+        self.assertIn("fiscalization",row["reviewTopics"])
+        self.assertEqual(row["status"],"REVIEW_REQUIRED")
+        self.assertEqual(d["classify"]("Nepovezana odluka"),["UNCLASSIFIED_REVIEW"])
+        with self.assertRaises(ValueError):
+            d["metadata"](eli,lambda *_:[])
+
     def test_invalid_api(self):
         for value in [[1,1],[True],[-1],{}]:
             with self.assertRaises(ValueError):

@@ -38,7 +38,7 @@ class OfficialAPI:
             urllib.request.HTTPSHandler(context=ssl.create_default_context()))
         self.last=0.0
     def __call__(self,endpoint,payload):
-        if endpoint not in {"editions","acts"}:
+        if endpoint not in {"editions","acts","act"}:
             raise ValueError("Unknown official API endpoint")
         time.sleep(max(0,0.5-(time.monotonic()-self.last)))
         self.last=time.monotonic()
@@ -110,6 +110,39 @@ def changes(current,previous=None):
     return {"status":"REVIEW_REQUIRED" if new or missing else "NO_NEW_IDENTIFIERS",
             "new":[ELI+i for i in new],"missing":[ELI+i for i in missing],"inventoryCount":len(observed)}
 
+def classify(title):
+    """Review routing, never a legal applicability decision."""
+    if not isinstance(title,str) or not 1<=len(title)<=4000:
+        raise ValueError("Invalid title")
+    normalized=title.casefold()
+    groups={
+        "fiscalization": ("fiskaliz", "e-račun", "eračun", "elektroničk", "kpd"),
+        "tax": ("porez", "pdv", "trošarin", "doprinos"),
+        "accounting": ("računovod", "revizij", "financijsk izvješt", "knjigovod"),
+        "prices": ("cijen", "potrošač", "trgovin"),
+        "business": ("obrt", "trgovačk", "platn", "radn"),
+    }
+    return [key for key,terms in groups.items() if any(term in normalized for term in terms)] or ["UNCLASSIFIED_REVIEW"]
+
+def metadata(eli,api):
+    if not eli.startswith(ELI):
+        raise ValueError("Unexpected official identifier")
+    parts=eli[len(ELI):].split("/")
+    if len(parts)!=3 or not re.fullmatch(r"[0-9]{4}",parts[0]) or not re.fullmatch(r"[1-9][0-9]{0,3}",parts[1]) or not ACT.fullmatch(parts[2]):
+        raise ValueError("Malformed official identifier")
+    year,edition,act=parts
+    data=api("act",{"part":"SL","year":int(year),"number":int(edition),"act_num":act,"format":"JSON-LD"})
+    if not isinstance(data,list) or len(data)>10000:
+        raise ValueError("Invalid official metadata")
+    matches=[row for row in data if isinstance(row,dict) and row.get("@id")==eli+"/hrv"]
+    if len(matches)!=1:
+        raise ValueError("Missing unique Croatian expression")
+    titles=matches[0].get("http://data.europa.eu/eli/ontology#title")
+    if not isinstance(titles,list) or len(titles)!=1 or not isinstance(titles[0],dict):
+        raise ValueError("Missing unique Croatian title")
+    title=titles[0].get("@value")
+    return {"eli":eli,"title":title,"reviewTopics":classify(title),"status":"REVIEW_REQUIRED"}
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--inventory",type=pathlib.Path,required=True)
@@ -117,7 +150,8 @@ def main():
     parser.add_argument("--baseline",type=pathlib.Path)
     args=parser.parse_args()
     year=datetime.datetime.now(datetime.timezone.utc).year
-    observed=collect([year-1,year],OfficialAPI())
+    api=OfficialAPI()
+    observed=collect([year-1,year],api)
     if args.baseline is not None:
         with args.baseline.open("rb") as stream:
             raw=stream.read(8*LIMIT+1)
@@ -127,6 +161,8 @@ def main():
     else:
         previous=None
     report=changes(observed,previous)
+    report['classified']=[metadata(eli,api) for eli in report['new'][:200]]
+    report['unclassifiedPending']=report['new'][200:]
     args.inventory.write_text(json.dumps(observed,sort_keys=True,indent=2)+"\n",encoding="utf-8")
     args.report.write_text(json.dumps(report,indent=2)+"\n",encoding="utf-8")
     print(report["status"]+": "+str(len(report["new"]))+" new identifiers; "+str(len(report["missing"]))+" missing identifiers.")

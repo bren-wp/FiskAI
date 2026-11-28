@@ -10,6 +10,9 @@ import urllib.request
 SOURCES = {
     "fiscalization-law": "https://narodne-novine.nn.hr/clanci/sluzbeni/2025_06_89_1233.html",
     "e-invoice": "https://porezna.gov.hr/fiskalizacija/bezgotovinski-racuni/eracun",
+    "kpd-2027": "https://porezna.gov.hr/fiskalizacija/bezgotovinski-racuni/bezgotovinski-racuni-novosti/o/izmjene-kpd-sijecanj-2027",
+    "f1-2027": "https://porezna.gov.hr/fiskalizacija/gotovinski-racuni/gotovinski-racuni-novosti/o/pravilnik-krajnja-potrosnja",
+    "f2-public-bodies-2027": "https://porezna.gov.hr/fiskalizacija/bezgotovinski-racuni/bezgotovinski-racuni-novosti/o/obveze-drzavnih-tijela-jls",
     "f1-technical": "https://porezna.gov.hr/fiskalizacija/gotovinski-racuni/tehnicki-podaci/o/tehnicki-podaci",
     "f1-rulebook": "https://narodne-novine.nn.hr/clanci/sluzbeni/full/2025_12_153_2278.html",
     "f1-rulebook-amendment-2026": "https://narodne-novine.nn.hr/clanci/sluzbeni/2026_09_97_1181.html",
