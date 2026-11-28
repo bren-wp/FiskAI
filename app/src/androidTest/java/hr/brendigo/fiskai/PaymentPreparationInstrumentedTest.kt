@@ -158,6 +158,28 @@ class PaymentPreparationInstrumentedTest {
             assertEquals(3,prepared.getInt("legalDecisionFormat"))
             assertEquals(LegalRuleCatalog.CATALOG_SHA256,prepared.getString("catalogSha256"))
             val revision=LegalDecisionStore.auditRevision(ctx,source,full.id,RegulatoryVector.resolver())
+            // The first signed synthetic catalog has the same 2026 interval, but different bytes.
+            val fixture=RegulatoryVector.data
+            val oldBytes=android.util.Base64.decode(fixture.getJSONArray("catalogs").getString(0),android.util.Base64.NO_WRAP)
+            val oldDigest=HistoricalLegalDecisionResolver.digest(oldBytes)
+            assertNotEquals(LegalRuleCatalog.CATALOG_SHA256,oldDigest)
+            val historicalBackup=JSONObject(exported)
+            val historicalRows=historicalBackup.getJSONArray("paymentPreparations")
+            val historical=(0 until historicalRows.length()).map{historicalRows.getJSONObject(it)}.single{it.getString("receiptId")==full.id}
+            historical.put("catalogSha256",oldDigest)
+            val historicalName="payment-history-"+UUID.randomUUID()+".db"
+            val historicalDb=RecordDatabase(ctx,historicalName)
+            try {
+                assertTrue(runCatching{SecureRecords.restoreWorkspace(ctx,historicalBackup.toString(),historicalDb)}.isFailure)
+                assertTrue(historicalDb.readableDatabase.rawQuery("SELECT 1 FROM fiscal_document",null).use{!it.moveToFirst()})
+                val resolver=RegulatoryVector.resolver()
+                SecureRecords.restoreWorkspace(ctx,historicalBackup.toString(),historicalDb,resolver)
+                val restored=JSONObject(SecureRecords.exportWorkspace(ctx,historicalDb,resolver)).getJSONArray("paymentPreparations")
+                val restoredRow=(0 until restored.length()).map{restored.getJSONObject(it)}.single{it.getString("receiptId")==full.id}
+                assertEquals(oldDigest,restoredRow.getString("catalogSha256"))
+                assertEquals(event,restoredRow.getString("eventId"))
+                assertEquals(1,LegalDecisionStore.auditRevision(ctx,historicalDb,full.id,resolver).sequence)
+            }finally{historicalDb.close();ctx.deleteDatabase(historicalName)}
             assertEquals(2,revision.sequence)
             assertEquals("HR-F2-2026-v1",revision.rule?.version)
             assertEquals("2026-01-01",prepared.getString("ruleFrom"))

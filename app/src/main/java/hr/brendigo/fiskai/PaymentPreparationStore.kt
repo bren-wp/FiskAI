@@ -25,7 +25,8 @@ internal object PaymentPreparationStore {
     }
     private fun uuid(value:String) { require(UUID.fromString(value).toString()==value) }
     private data class Checked(val json:JSONObject,val total:Long)
-    private fun snapshot(context:Context,db:RecordDatabase,sql:SQLiteDatabase,receipt:ReceiptEvidence,document:String,event:String):Checked {
+    private fun snapshot(context:Context,db:RecordDatabase,sql:SQLiteDatabase,receipt:ReceiptEvidence,document:String,event:String,
+        catalogDigest:String=LegalRuleCatalog.CATALOG_SHA256,resolver:HistoricalLegalDecisionResolver?=null):Checked {
         uuid(document);uuid(event)
         require(receipt.id.matches(Regex("[0-9a-f]{64}")))
         val secure=SecureRecords(context,"fiskai_demo_receipts",db)
@@ -44,16 +45,19 @@ internal object PaymentPreparationStore {
             require(receipt.date>=date)
             c.getString(1) to total
         }
-        val deadline=FiscalReportingRules.deadline(FiscalReportingRules.Event.PAYMENT,receipt.date)
-        require(deadline.kind==FiscalReportingRules.DeadlineKind.MONTHLY_STATUTORY_DATE)
-        val rule= requireNotNull(LegalRuleCatalog.resolve(receipt.date))
+        val rule=if(catalogDigest==LegalRuleCatalog.CATALOG_SHA256) requireNotNull(LegalRuleCatalog.resolve(receipt.date))
+            else requireNotNull(requireNotNull(resolver){"Independently verified historical catalog required"}
+                .resolveByDigest(catalogDigest,receipt.date,LegalCompliance.Subject.UNKNOWN,
+                    LegalCompliance.Scope.STANDARD_DOMESTIC_B2B).rule)
+        // Frozen nominal monthly payment policy for formats 0–3; not a legal authorization.
+        val deadline=FiscalReportingRules.nominalMonthlyV1(receipt.date)
         val receiptDigest=FiscalCutover.digest(ReceiptRules.receiptJson(receipt).toString())
         return Checked(JSONObject().put("eventId",event).put("environment","DEMO").put("kind","DEMO_PAYMENT_PREPARATION")
             .put("receiptId",receipt.id).put("documentId",document).put("documentDigest",digest)
             .put("receiptDigest",receiptDigest).put("evidenceSha256",FiscalCutover.digest("DEMO_PAYMENT_V1\u0000"+digest+"\u0000"+receiptDigest))
             .put("eventDate",receipt.date).put("amountCents",receipt.cents).put("ruleVersion",rule.version)
             .put("deadlineDate",requireNotNull(deadline.date))
-            .put("legalDecisionFormat",3).put("catalogSha256",LegalRuleCatalog.CATALOG_SHA256)
+            .put("legalDecisionFormat",3).put("catalogSha256",catalogDigest)
             .put("ruleFrom",rule.from).put("ruleUntil",rule.until)
             .put("legalSource","https://narodne-novine.nn.hr/clanci/sluzbeni/2025_06_89_1233.html")
             .put("deadlineKind",deadline.kind.name),total)
@@ -65,8 +69,12 @@ internal object PaymentPreparationStore {
             if(e is Long || e is Int) (a is Long || a is Int) && (a as Number).toLong()==(e as Number).toLong()
             else a==e
         }
-    private fun checkSnapshot(context:Context,db:RecordDatabase,sql:SQLiteDatabase,rows:Map<String,ReceiptEvidence>,j:JSONObject):Checked {
-        val expected=snapshot(context,db,sql,requireNotNull(rows[j.getString("receiptId")]),j.getString("documentId"),j.getString("eventId"))
+    private fun checkSnapshot(context:Context,db:RecordDatabase,sql:SQLiteDatabase,rows:Map<String,ReceiptEvidence>,j:JSONObject,
+        resolver:HistoricalLegalDecisionResolver?=null):Checked {
+        val format=j.optInt("legalDecisionFormat",0)
+        require(format in 0..3)
+        val digest=if(format==3)j.getString("catalogSha256") else LegalRuleCatalog.CATALOG_SHA256
+        val expected=snapshot(context,db,sql,requireNotNull(rows[j.getString("receiptId")]),j.getString("documentId"),j.getString("eventId"),digest,resolver)
         if(j.optInt("legalDecisionFormat",0)<3)expected.json.remove("catalogSha256")
         if (!j.has("legalDecisionFormat")) {
             // Legacy evidence is not retroactively supplemented.
@@ -99,7 +107,7 @@ internal object PaymentPreparationStore {
         }
         return totals
     }
-    private fun load(context:Context,db:RecordDatabase,sql:SQLiteDatabase,receipts:Map<String,ReceiptEvidence>):List<Checked> {
+    private fun load(context:Context,db:RecordDatabase,sql:SQLiteDatabase,receipts:Map<String,ReceiptEvidence>,resolver:HistoricalLegalDecisionResolver?=null):List<Checked> {
         val result=mutableListOf<Checked>()
         val secure=SecureRecords(context,NS,db)
         sql.rawQuery("SELECT receiptId,documentId,eventId,payload FROM "+TABLE+" ORDER BY receiptId",null).use{c->
@@ -108,7 +116,7 @@ internal object PaymentPreparationStore {
                 val j=JSONObject(secure.openSnapshot(c.getString(0),c.getString(3)))
                 require(j.getString("receiptId")==c.getString(0) && j.getString("documentId")==c.getString(1) && j.getString("eventId")==c.getString(2))
                 LegalDecisionStore.verify(context,db,sql,j)
-                result.add(checkSnapshot(context,db,sql,receipts,j))
+                result.add(checkSnapshot(context,db,sql,receipts,j,resolver))
             }
         }
         validateTotals(result)
@@ -185,18 +193,18 @@ internal object PaymentPreparationStore {
         } finally {sql.endTransaction()}
     }
     /** Called under record lock within the workspace transaction. */
-    fun export(context:Context,db:RecordDatabase,sql:SQLiteDatabase):JSONArray {
+    fun export(context:Context,db:RecordDatabase,sql:SQLiteDatabase,resolver:HistoricalLegalDecisionResolver?=null):JSONArray {
         val empty=sql.rawQuery("SELECT 1 FROM "+TABLE+" LIMIT 1",null).use{!it.moveToFirst()}
         if(empty)return JSONArray()
         check(BuildConfig.DEMO_MODE && FiscalCutover.active(sql))
-        return JSONArray().apply{load(context,db,sql,receipts(context,db,sql)).forEach{put(it.json)}}
+        return JSONArray().apply{load(context,db,sql,receipts(context,db,sql),resolver).forEach{put(it.json)}}
     }
-    fun restore(context:Context,db:RecordDatabase,sql:SQLiteDatabase,array:JSONArray,legacyFull:Boolean) {
+    fun restore(context:Context,db:RecordDatabase,sql:SQLiteDatabase,array:JSONArray,legacyFull:Boolean,resolver:HistoricalLegalDecisionResolver?=null) {
         check(BuildConfig.DEMO_MODE && FiscalCutover.active(sql))
         require(array.length() in 1..ReceiptRules.MAX_ROWS)
         require(export(context,db,sql).length()==0)
         val receipts=receipts(context,db,sql)
-        val rows=List(array.length()){checkSnapshot(context,db,sql,receipts,array.getJSONObject(it))}
+        val rows=List(array.length()){checkSnapshot(context,db,sql,receipts,array.getJSONObject(it),resolver)}
         validateTotals(rows,legacyFull)
         rows.forEach{insert(context,db,sql,it.json)}
     }
