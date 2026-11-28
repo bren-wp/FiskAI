@@ -29,8 +29,8 @@ internal fun InventoryScreen(products:List<Product>){
     var message by remember{mutableStateOf("")}
     var confirm by remember{mutableStateOf(false)}
     LaunchedEffect(inventory){
-        val r=withContext(Dispatchers.IO){runCatching{inventory.balance() to inventory.history()}}
-        r.onSuccess{balances=it.first;history=it.second;ready=true}.onFailure{message="Skladišna evidencija nije dostupna."}
+        val r=withContext(Dispatchers.IO){runCatching{inventory.verifiedSnapshot()}}
+        r.onSuccess{balances=it.balances;history=it.recent;ready=true}.onFailure{message="Skladišna evidencija nije dostupna."}
         busy=false
     }
     Text("Skladište",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold)
@@ -64,8 +64,8 @@ internal fun InventoryScreen(products:List<Product>){
             busy=true
             scope.launch{
                 try{
-                    val r=withContext(Dispatchers.IO){runCatching{inventory.post(id,p,q,direction,note);inventory.balance() to inventory.history()}}
-                    r.onSuccess{balances=it.first;history=it.second;quantity="";reason="";message="Kretanje je spremljeno."}.onFailure{ready=false;message="Knjiženje nije potvrđeno. Provjerite stanje i ponovno otvorite zaslon prije novog unosa."}
+                    val r=withContext(Dispatchers.IO){runCatching{inventory.post(id,p,q,direction,note);inventory.verifiedSnapshot()}}
+                    r.onSuccess{balances=it.balances;history=it.recent;quantity="";reason="";message="Kretanje je spremljeno."}.onFailure{ready=false;message="Knjiženje nije potvrđeno. Provjerite stanje i ponovno otvorite zaslon prije novog unosa."}
                 }finally{busy=false}
             }
         }

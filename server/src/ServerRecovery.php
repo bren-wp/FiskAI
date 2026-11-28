@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-/** Bounded logical archive of all application data tables in migrations 001–012.
+/** Bounded logical archive of all application data tables in migrations 001–013.
  * No SQL from archives is executed. Restore only to a freshly migrated isolated database.
  * Database accounts, external storage, keys, grants and physical binlogs are not included.
  */
@@ -20,6 +20,7 @@ final class ServerRecovery {
         'educ_business_subject'=>['subject_id'],'educ_business_document'=>['subject_id','document_id'],
         'educ_business_chain_head'=>['subject_id'],'educ_recovery_quarantine'=>['subject_id'],
         'f2_educ_intake'=>['subject_id','document_id'],
+        'legal_decision_ledger'=>['subject_id','document_id'],
         'cis_educ_response_evidence'=>['message_id'],'cis_educ_dispatch'=>['message_id'],
         'cis_educ_dispatch_audit'=>['message_id','event_type']
     ];

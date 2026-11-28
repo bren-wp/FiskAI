@@ -1,0 +1,72 @@
+name: Regulatory publication discovery
+on:
+  schedule:
+    - cron: '35 6 * * *'
+  workflow_dispatch:
+  pull_request:
+    paths: ['scripts/regulatory-discovery.py','scripts/test-regulatory-discovery.py','scripts/eu-regulatory-discovery.py','scripts/test-eu-regulatory-discovery.py','.github/workflows/regulatory-discovery.yml']
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: regulatory-discovery-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - run: python3 scripts/test-regulatory-discovery.py
+      - run: python3 scripts/test-eu-regulatory-discovery.py
+  discover:
+    needs: test
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Load prior completed inventory
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p previous
+          run="$(gh run list --workflow regulatory-discovery.yml --branch "$GITHUB_REF_NAME" --status success --limit 1 --json databaseId --jq '.[0].databaseId // empty')"
+          if [ -n "$run" ]; then
+            gh run download "$run" --name regulatory-discovery --dir previous
+            test -f previous/inventory.json
+          fi
+      - name: Discover official publications
+        run: |
+          set -euo pipefail
+          args=()
+          if [ -f previous/inventory.json ]; then args+=(--baseline previous/inventory.json); fi
+          python3 scripts/regulatory-discovery.py --inventory inventory.json --report report.json "${args[@]}"
+      - uses: actions/upload-artifact@v6
+        with:
+          name: regulatory-discovery
+          path: |
+            inventory.json
+            report.json
+          if-no-files-found: error
+          retention-days: 90
+  discover-eu:
+    needs: test
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - run: python3 scripts/eu-regulatory-discovery.py --output eu-publications.json
+      - uses: actions/upload-artifact@v6
+        with:
+          name: eu-regulatory-discovery
+          path: eu-publications.json
+          if-no-files-found: error
+          retention-days: 90

@@ -38,7 +38,7 @@ internal class SecureRecords(
             BackupRecord("fiskai_receipts","events","[]")
         )
 
-        internal fun exportWorkspace(context:Context,database:RecordDatabase=RecordDatabase.shared(context)):String = synchronized(lock) {
+        internal fun exportWorkspace(context:Context,database:RecordDatabase=RecordDatabase.shared(context),resolver:HistoricalLegalDecisionResolver?=null):String = synchronized(lock) {
             val records=org.json.JSONObject()
             val receiptExport=ReceiptStore.export(context,database,database.readableDatabase)
             for(item in backupRecords) {
@@ -51,7 +51,7 @@ internal class SecureRecords(
                 val journals=LedgerBackup(context,database).export(sql)
                 val root=org.json.JSONObject().put("version",2).put("demo",BuildConfig.DEMO_MODE).put("records",records).put("journals",journals)
                 if(FiscalCutover.active(sql))root.put("version",3).put("roomOutbox",FiscalCutover.export(context,database,sql,journals))
-                val payments=PaymentPreparationStore.export(context,database,sql)
+                val payments=PaymentPreparationStore.export(context,database,sql,resolver)
                 if(payments.length()>0)root.put("version",5).put("paymentPreparations",payments)
                 val result=root.toString()
                 require(result.toByteArray(Charsets.UTF_8).size<=PortableBackup.MAX_PLAINTEXT)
@@ -61,7 +61,7 @@ internal class SecureRecords(
         }
 
         // Legacy v1 workspace or v2 workspace with journals; never overwrite existing records.
-        internal fun restoreWorkspace(context:Context,json:String,database:RecordDatabase=RecordDatabase.shared(context)) = synchronized(lock) {
+        internal fun restoreWorkspace(context:Context,json:String,database:RecordDatabase=RecordDatabase.shared(context),resolver:HistoricalLegalDecisionResolver?=null) = synchronized(lock) {
             val root=org.json.JSONObject(json)
             val version=root.getInt("version")
             require(version in 1..5 && root.getBoolean("demo")==BuildConfig.DEMO_MODE)
@@ -98,7 +98,7 @@ internal class SecureRecords(
             val sql=database.writableDatabase
             sql.beginTransaction()
             try {
-                for(table in listOf("demo_receipt","demo_sequence","stock_event","stock_balance","cis_echo","fiscal_document","fiscal_outbox","demo_payment_preparation")) {
+                for(table in listOf("demo_receipt","demo_sequence","stock_event","stock_balance","cis_echo","fiscal_document","fiscal_outbox","demo_payment_preparation","legal_decision_ledger")) {
                     sql.rawQuery("SELECT 1 FROM "+table+" LIMIT 1",null).use { require(!it.moveToFirst()) }
                 }
                 // Refuse unknown records, including certificates, instead of overwriting them.
@@ -110,7 +110,7 @@ internal class SecureRecords(
                 ReceiptStore.restore(context,database,sql,payload.getJSONArray(ReceiptStore.BANK),payload.getJSONArray(ReceiptStore.EVENTS))
                 if(journals!=null)ledger.restore(sql,journals)
                 if(version>=3||FiscalCutover.active(sql))FiscalCutover.populate(context,database,sql,queues)
-                if(payments!=null)PaymentPreparationStore.restore(context,database,sql,payments,legacyFull=version==4)
+                if(payments!=null)PaymentPreparationStore.restore(context,database,sql,payments,legacyFull=version==4,resolver=resolver)
                 sql.setTransactionSuccessful()
             } finally { sql.endTransaction() }
         }

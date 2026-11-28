@@ -12,15 +12,31 @@ final class LegalCompliance {
         }
     }
 
-    public static function evaluate(string $date, string $subject, string $scope): array {
+    /** Resolve a validated ISO date in a half-open interval; gaps fail closed. */
+    public static function ruleForDate(string $date): ?array {
         self::validateDate($date);
+        static $rules = null;
+        $rules ??= require __DIR__.'/LegalRuleCatalog.php';
+        $match = null;
+        foreach ($rules as $rule) {
+            if ($date >= $rule['from'] && $date < $rule['until']) {
+                if ($match !== null) throw new LogicException('Overlapping legal rules.');
+                $match = $rule;
+            }
+        }
+        return $match;
+    }
+
+    public static function evaluate(string $date, string $subject, string $scope): array {
+        return self::evaluateResolved(self::ruleForDate($date),$subject,$scope);
+    }
+
+    /** Internal shared evaluator; callers must resolve a validated, trusted catalog first. */
+    public static function evaluateResolved(?array $rule,string $subject,string $scope):array {
         if (!in_array($subject,['VAT','NON_VAT_COVERED','UNKNOWN'],true)
             || !in_array($scope,['STANDARD_DOMESTIC_B2B','UNRESOLVED'],true)) {
             throw new InvalidArgumentException('Invalid legal context.');
         }
-        static $rules = null;
-        $rules ??= require __DIR__.'/LegalRuleCatalog.php';
-        $rule = $rules[(int)substr($date,0,4)] ?? null;
         $version = $rule['version'] ?? null;
         $issue = $receive = 'REVIEW_REQUIRED';
         if ($version !== null && $scope === 'STANDARD_DOMESTIC_B2B' && $subject !== 'UNKNOWN') {

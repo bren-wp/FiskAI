@@ -7,22 +7,27 @@ internal object FiscalReportingRules {
     data class Deadline(val kind: DeadlineKind, val date: String? = null, val workingDays: Int? = null)
 
     fun deadline(event: Event, date: String, selfBilled: Boolean = false): Deadline {
-        val year = LegalCompliance.validateDate(date)
+        LegalCompliance.validateDate(date)
         require(!selfBilled || event == Event.ARTICLE_51_SUPPLY)
-        if (LegalRuleCatalog.rules[year] == null) return Deadline(DeadlineKind.REVIEW_REQUIRED)
+        if (LegalRuleCatalog.resolve(date) == null) return Deadline(DeadlineKind.REVIEW_REQUIRED)
         return when(event) {
-            Event.PAYMENT, Event.REJECTION -> {
-                val month = date.substring(5, 7).toInt()
-                val nextYear = if (month == 12) year + 1 else year
-                val nextMonth = if (month == 12) 1 else month + 1
-                Deadline(DeadlineKind.MONTHLY_STATUTORY_DATE,
-                    nextYear.toString().padStart(4, '0') + "-" + nextMonth.toString().padStart(2, '0') + "-20")
-            }
+            Event.PAYMENT, Event.REJECTION -> nominalMonthlyV1(date)
             Event.ISSUED -> Deadline(DeadlineKind.AT_ISSUE, date)
             Event.ARTICLE_51_SUPPLY -> if (selfBilled) Deadline(DeadlineKind.WORKING_DAYS_REVIEW, workingDays = 5)
                 else Deadline(DeadlineKind.AT_ISSUE, date)
             Event.SELF_BILLED, Event.RECEIVED, Event.TECHNICAL_INTERRUPTION ->
                 Deadline(DeadlineKind.WORKING_DAYS_REVIEW, workingDays = 5)
         }
+    }
+
+    /** Historical nominal deadline formula for existing DEMO evidence, not a calendar/legal review. */
+    internal fun nominalMonthlyV1(date:String):Deadline {
+        val year=LegalCompliance.validateDate(date)
+        val month=date.substring(5,7).toInt()
+        val nextYear=if(month==12)year+1 else year
+        val nextMonth=if(month==12)1 else month+1
+        require(nextYear<=9999)
+        return Deadline(DeadlineKind.MONTHLY_STATUTORY_DATE,
+            nextYear.toString().padStart(4,'0')+"-"+nextMonth.toString().padStart(2,'0')+"-20")
     }
 }

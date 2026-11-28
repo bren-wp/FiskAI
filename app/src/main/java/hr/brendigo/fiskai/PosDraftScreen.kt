@@ -4,11 +4,18 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.text.font.FontWeight
 import java.math.BigDecimal
 
 @Composable
 internal fun PosDraftScreen(products:List<Product>,contacts:List<Contact>,save:(Draft)->Boolean){
+    val context=LocalContext.current
+    val stock by produceState<Result<Map<String,Long>>?>(null,context){
+        value=withContext(Dispatchers.IO){runCatching{Inventory(context).balance()}}
+    }
     var cart by remember{mutableStateOf(emptyMap<String,BigDecimal>())}
     var query by remember{mutableStateOf("")}
     var customer by remember{mutableStateOf<Contact?>(null)}
@@ -17,6 +24,8 @@ internal fun PosDraftScreen(products:List<Product>,contacts:List<Contact>,save:(
     Text("POS blagajna",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold)
     Panel{
         Text("Košarica za nacrt računa",fontWeight=FontWeight.Bold)
+        if(stock==null)Text("Provjera stanja zaliha…")
+        else if(stock?.isFailure==true)Text("Stanje zaliha nije potvrđeno.")
         DirectoryPicker(customer?.name ?: "Odaberi kupca",contacts.map{it.name}){customer=contacts[it]}
         OutlinedTextField(query,{query=it},label={Text("Naziv, šifra ili KPD")},singleLine=true,modifier=Modifier.fillMaxWidth())
         products.filter{it.name.contains(query,true)||it.code.contains(query,true)||it.kpd.contains(query)}.take(50).forEach{p->
@@ -31,7 +40,14 @@ internal fun PosDraftScreen(products:List<Product>,contacts:List<Contact>,save:(
         if(lines.isEmpty())Text("Košarica je prazna.")
         products.filter{cart.containsKey(it.id)}.forEach{p->
             Row{
-                Column(Modifier.weight(1f)){Text(p.name);Text(cart[p.id]!!.toPlainString()+" × "+euro(p.price)+" bez PDV-a")}
+                Column(Modifier.weight(1f)){
+                    Text(p.name);Text(cart[p.id]!!.toPlainString()+" × "+euro(p.price)+" bez PDV-a")
+                    if(!p.service)stock?.getOrNull()?.let{balances->
+                        val available=StockQuantity.decode(balances[p.id]?:0L)
+                        Text("Evidentirano stanje: "+available.toPlainString())
+                        if(cart[p.id]!!>available)Text("Količina prelazi evidentirano stanje.",color=MaterialTheme.colorScheme.error)
+                    }
+                }
                 TextButton(onClick={
                     val q=cart[p.id]!!.subtract(BigDecimal.ONE)
                     cart=if(q.signum()<=0)cart-p.id else cart+(p.id to q)

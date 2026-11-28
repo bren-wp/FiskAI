@@ -30,3 +30,24 @@
 ## 0.1.0 — 27.11.2026.
 - Testni APK, DEMO APK, nepotpisani AAB, izvorni kod i snimke emulatora.
 - Fiskalizacija i eRačuni nisu verificirani za stvarno poslovanje.
+
+### Zakonski katalog — datumski intervali
+
+- Kotlin i PHP koriste zajednički katalog s početkom uključivo i završetkom isključivo. Podržane su odvojene revizije unutar iste godine; praznine zahtijevaju pregled. Postojeća pravila i identifikatori 2026./2027. ostaju nepromijenjeni.
+- Dodani su sintetički regresijski testovi strukture kataloga; produkcijsko odobrenje nije dodano.
+
+### Zakonska evidencija i regresija
+
+- Ispravljeni preostali godišnji pristupi katalogu u fiskalnom outboxu i DEMO sinkronizaciji (Android/PHP).
+- Dodana migracija 013 i HMAC autentificirani F2 EDUC snapshot pravila/odluke u istoj transakciji. Postojeći dokumenti se ne mijenjaju; nema produkcijske autorizacije.
+- PHP i Kotlin provjeravaju 10.276 odluka prema istom determinističkom kontrolnom sažetku.
+
+### Regulatorni integritet
+
+- Ispravljen Android compile pad u PaymentPreparationStore.
+- Dodan offline verifier potpisane povijesti s neovisnim latest checkpointom i sintetički testovi.
+- Novi DEMO payment Room payload sadrži snapshot izvora, intervala i vrste roka; postojeći zapisi ostaju nepromijenjeni.
+
+- Room schema 11: aditivna migracija i zasebni šifrirani DEMO legal decision ledger, uključujući backup/restore i legacy kompatibilnost.
+
+- Objedinjeni računovodstveni pregled razdoblja, usklađenje bankovnih priljeva s potvrdama i CSV sažetak bez osobnih identifikatora.

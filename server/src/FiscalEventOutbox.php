@@ -21,8 +21,7 @@ final class FiscalEventOutbox {
         self::scope($environment,$subject,$event); self::uuid($document);
         if (!preg_match('/\A[0-9a-f]{64}\z/D',$digest)) throw new InvalidArgumentException('Invalid evidence digest.');
         $deadline=FiscalReportingRules::deadline($type,$date,$selfBilled);
-        $rules=require __DIR__.'/LegalRuleCatalog.php';
-        $rule=$rules[(int)substr($date,0,4)]??null;
+        $rule=LegalCompliance::ruleForDate($date);
         if ($rule===null || $deadline['kind']==='REVIEW_REQUIRED') throw new InvalidArgumentException('Unreviewed rule period.');
         $immutable=[
             'document_id'=>$document,'event_type'=>$type,'event_date'=>$date,'evidence_sha256'=>$digest,

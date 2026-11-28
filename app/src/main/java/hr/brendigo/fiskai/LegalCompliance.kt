@@ -25,8 +25,11 @@ internal object LegalCompliance {
     }
 
     fun evaluate(date: String, subject: Subject, scope: Scope): Decision {
-        val year = validateDate(date)
-        val rule = LegalRuleCatalog.rules[year]
+        validateDate(date)
+        return evaluateResolved(LegalRuleCatalog.resolve(date), subject, scope)
+    }
+
+    internal fun evaluateResolved(rule: LegalRuleCatalog.Rule?, subject: Subject, scope: Scope): Decision {
         val version = rule?.version
         if (rule == null || scope != Scope.STANDARD_DOMESTIC_B2B || subject == Subject.UNKNOWN) {
             return Decision(version, Obligation.REVIEW_REQUIRED, Obligation.REVIEW_REQUIRED)

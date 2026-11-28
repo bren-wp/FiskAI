@@ -25,6 +25,12 @@ class InventoryInstrumentedTest {
             assertEquals(15000L,store.balance()[p.id]!!)
             assertEquals(2,store.history().size)
             assertTrue(runCatching{db.writableDatabase.execSQL("DELETE FROM stock_event")}.isFailure)
+            db.writableDatabase.execSQL("UPDATE stock_balance SET quantity=999 WHERE product_id=?",arrayOf(p.id))
+            assertTrue(runCatching{store.verifiedSnapshot()}.isFailure)
+            assertTrue(runCatching{store.post(UUID.randomUUID().toString(),p,BigDecimal.ONE,true,"Ne smije proći")}.isFailure)
+            assertEquals(2,db.readableDatabase.rawQuery("SELECT COUNT(*) FROM stock_event",null).use{it.moveToFirst();it.getInt(0)})
+            db.writableDatabase.execSQL("UPDATE stock_balance SET quantity=15000 WHERE product_id=?",arrayOf(p.id))
+            assertEquals(15000L,store.verifiedSnapshot().balances[p.id])
         }finally{db.close();context.deleteDatabase(name)}
     }
 }
