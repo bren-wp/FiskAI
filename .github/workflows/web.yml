@@ -43,6 +43,8 @@ jobs:
       - run: php server/tests/LegalParityTest.php
       - run: php server/tests/RegulatoryTrustAnchorTest.php
       - run: php server/tests/HistoricalLegalDecisionResolverTest.php
+      - run: python3 scripts/test-regulatory-vector.py
+      - run: php server/tests/RegulatoryVectorTest.php
       - run: python3 scripts/test-regulatory-witness.py
       - run: python3 scripts/test-regulatory-witness-https.py
       - run: php server/tests/TaxStatusHistoryTest.php
