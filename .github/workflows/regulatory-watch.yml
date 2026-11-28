@@ -1,0 +1,54 @@
+name: Regulatory source watch
+on:
+  schedule:
+    - cron: '35 5 * * *'
+  workflow_dispatch:
+  pull_request:
+    paths: ['scripts/regulatory-watch.py','scripts/test-regulatory-watch.py','.github/workflows/regulatory-watch.yml']
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: regulatory-source-watch-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - run: python3 scripts/test-regulatory-watch.py
+  observe:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Fetch previous successful observation
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p previous
+          run="$(gh run list --workflow regulatory-watch.yml --branch "$GITHUB_REF_NAME" --event schedule --status success --limit 1 --json databaseId --jq '.[0].databaseId // empty')"
+          if [ -n "$run" ]; then
+            gh run download "$run" --name regulatory-observation --dir previous
+            test -f previous/observation.json
+          fi
+      - name: Observe fixed official sources
+        run: |
+          set -euo pipefail
+          args=()
+          if [ -f previous/observation.json ]; then args+=(--baseline previous/observation.json); fi
+          python3 scripts/regulatory-watch.py --output observation.json "${args[@]}"
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: regulatory-observation
+          path: observation.json
+          if-no-files-found: warn
+          retention-days: 90
