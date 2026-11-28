@@ -41,3 +41,9 @@
 - Ispravljeni preostali godišnji pristupi katalogu u fiskalnom outboxu i DEMO sinkronizaciji (Android/PHP).
 - Dodana migracija 013 i HMAC autentificirani F2 EDUC snapshot pravila/odluke u istoj transakciji. Postojeći dokumenti se ne mijenjaju; nema produkcijske autorizacije.
 - PHP i Kotlin provjeravaju 10.276 odluka prema istom determinističkom kontrolnom sažetku.
+
+### Regulatorni integritet
+
+- Ispravljen Android compile pad u PaymentPreparationStore.
+- Dodan offline verifier potpisane povijesti s neovisnim latest checkpointom i sintetički testovi.
+- Novi DEMO payment Room payload sadrži snapshot izvora, intervala i vrste roka; postojeći zapisi ostaju nepromijenjeni.
