@@ -21,6 +21,16 @@ try{
     verify($a['rule']['version']==='HR-F2-2027-v1'&&$a['dispatchAuthorized']===false);
     verify($ledger->append($subject,$id,$review)===$a);
     verify($ledger->read($subject,$id)===$a);
+    verify($a['catalogSha256']===hash_file('sha256',__DIR__.'/../contracts/legal-rules.json'));
+    $catalog=file_get_contents(__DIR__.'/../contracts/legal-rules.json');
+    $line='1|'.str_repeat('0',64).'|'.$a['catalogSha256']."\n";
+    $history="FISKAI-REGULATORY-HISTORY-V1\n".$line;
+    $signing=openssl_pkey_new(['private_key_type'=>OPENSSL_KEYTYPE_EC,'curve_name'=>'prime256v1']);
+    verify(openssl_sign($history,$signature,$signing,OPENSSL_ALGO_SHA256));
+    $public=openssl_pkey_get_details($signing)['key'];
+    $resolver=HistoricalLegalDecisionResolver::verified($history,$signature,$public,hash('sha256',$public),1,hash('sha256',$line),[$catalog]);
+    $audit=$ledger->auditRevision($subject,$id,$resolver);
+    verify($audit['sequence']===1&&$audit['decision']===$a['assessment']['decision']&&$audit['dispatchAuthorized']===false);
     verify($ledger->read('c1000000-0000-4000-8000-000000000002',$id)===null);
     reject(RuntimeException::class,fn()=>(new LegalDecisionLedger($db,random_bytes(32)))->read($subject,$id));
     $changed=$review;$changed['deadline']=['kind'=>'changed'];

@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__.'/LegalCompliance.php';
+require_once __DIR__.'/HistoricalLegalDecisionResolver.php';
 
 /** Internal F2 EDUC evidence; not authorization. Reads never recompute historical decisions. */
 final class LegalDecisionLedger {
@@ -31,7 +32,9 @@ final class LegalDecisionLedger {
         $rule=LegalCompliance::ruleForDate($assessment['eventDate']);
         if(LegalCompliance::evaluate($assessment['eventDate'],$assessment['subject'],$assessment['scope'])!==$assessment['decision'])
             throw new DomainException('Legal decision mismatch.');
-        $snapshot=['format'=>1,'source'=>'https://narodne-novine.nn.hr/clanci/sluzbeni/2025_06_89_1233.html',
+        $catalogHash=hash_file('sha256',__DIR__.'/../contracts/legal-rules.json');
+        if(!is_string($catalogHash))throw new RuntimeException('Active catalog unavailable.');
+        $snapshot=['format'=>2,'catalogSha256'=>$catalogHash,'source'=>'https://narodne-novine.nn.hr/clanci/sluzbeni/2025_06_89_1233.html',
             'assessment'=>$assessment,'rule'=>$rule,'deadline'=>$review['deadline'],'dispatchAuthorized'=>false];
         $payload=json_encode($snapshot,JSON_THROW_ON_ERROR);
         if(strlen($payload)>16384)throw new InvalidArgumentException('Legal decision capacity exceeded.');
@@ -40,5 +43,16 @@ final class LegalDecisionLedger {
         $s->execute([$subject,$id,$r['document_sha256'],$r['review_sha256'],$payload,$mac]);
         if($this->read($subject,$id)!==$snapshot)throw new DomainException('Immutable legal decision conflict.');
         return $snapshot;
+    }
+
+    /** Read-only external-history audit of a MAC-authenticated local decision. */
+    public function auditRevision(string $subject,string $id,HistoricalLegalDecisionResolver $resolver):array {
+        $snapshot=$this->read($subject,$id);
+        if($snapshot===null||($snapshot['format']??null)!==2)throw new DomainException('Decision has no original catalog identity.');
+        $a=$snapshot['assessment'];
+        $resolved=$resolver->resolveByDigest($snapshot['catalogSha256'],$a['eventDate'],$a['subject'],$a['scope']);
+        if($resolved['decision']!==$a['decision']||$resolved['rule']!==$snapshot['rule'])
+            throw new DomainException('Historical decision mismatch.');
+        return $resolved;
     }
 }

@@ -12,6 +12,13 @@ final class HistoricalLegalDecisionResolver {
         RegulatoryTrustAnchor::verify($history,$signature,$publicKey,$pin,$latestSequence,$latestHead,$catalogs);
         return new self($catalogs);
     }
+    public function resolveByDigest(string $digest,string $date,string $subject,string $scope):array {
+        if(!preg_match('/\A[0-9a-f]{64}\z/D',$digest))throw new InvalidArgumentException('Catalog identity required.');
+        foreach($this->catalogs as $index=>$bytes){
+            if(hash_equals($digest,hash('sha256',$bytes)))return $this->resolve($index+1,$digest,$date,$subject,$scope);
+        }
+        throw new DomainException('Unknown historical catalog.');
+    }
     public function resolve(int $sequence,string $digest,string $date,string $subject,string $scope):array {
         LegalCompliance::validateDate($date);
         if($sequence<1||!isset($this->catalogs[$sequence-1])||

@@ -69,6 +69,12 @@ internal class HistoricalLegalDecisionResolver private constructor(private val c
             require(verifier.verify(signature)){"Invalid regulatory freshness proof"}
         }
     }
+    fun resolveByDigest(catalogSha256:String,date:String,subject:LegalCompliance.Subject,scope:LegalCompliance.Scope):Result {
+        require(catalogSha256.matches(hex))
+        val index=catalogs.indexOfFirst{digest(it)==catalogSha256}
+        require(index>=0){"Unknown historical catalog"}
+        return resolve(index+1,catalogSha256,date,subject,scope)
+    }
     fun resolve(sequence:Int,catalogSha256:String,date:String,subject:LegalCompliance.Subject,scope:LegalCompliance.Scope):Result {
         LegalCompliance.validateDate(date)
         require(sequence in 1..catalogs.size && catalogSha256.matches(hex))

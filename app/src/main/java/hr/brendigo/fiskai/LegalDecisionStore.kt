@@ -11,9 +11,15 @@ internal object LegalDecisionStore {
     private const val TABLE="legal_decision_ledger"
     private const val NS="fiskai_legal_decision_ledger"
     private fun snapshot(payment:JSONObject):JSONObject {
-        require(payment.getInt("legalDecisionFormat")==2)
+        val format=payment.getInt("legalDecisionFormat")
+        require(format in 2..3)
         return JSONObject().apply {
-            put("format",2)
+            put("format",format)
+            if(format==3) {
+                val digest=payment.getString("catalogSha256")
+                require(digest.matches(Regex("[0-9a-f]{64}")))
+                put("catalogSha256",digest)
+            }
             for(key in listOf("receiptId","documentId","documentDigest","eventId","eventDate",
                 "ruleVersion","ruleFrom","ruleUntil","legalSource","deadlineKind","deadlineDate",
                 "evidenceSha256"))put(key,payment.getString(key))
@@ -23,7 +29,7 @@ internal object LegalDecisionStore {
     }
     fun insert(context:Context,db:RecordDatabase,sql:SQLiteDatabase,payment:JSONObject) {
         check(sql.inTransaction())
-        if(payment.optInt("legalDecisionFormat",0)!=2)return
+        if(payment.optInt("legalDecisionFormat",0) !in 2..3)return
         val id=payment.getString("receiptId")
         sql.insertOrThrow(TABLE,null,ContentValues().apply {
             put("receiptId",id)
@@ -35,7 +41,7 @@ internal object LegalDecisionStore {
         val payload=sql.rawQuery("SELECT payload FROM "+TABLE+" WHERE receiptId=?",arrayOf(id)).use {
             if(it.moveToFirst())it.getString(0) else null
         }
-        if(payment.optInt("legalDecisionFormat",0)!=2) {
+        if(payment.optInt("legalDecisionFormat",0) !in 2..3) {
             require(payload==null){"Unexpected legal decision"}
             return
         }
@@ -45,4 +51,27 @@ internal object LegalDecisionStore {
         require(saved.keys().asSequence().toSet()==expected.keys().asSequence().toSet() &&
             expected.keys().asSequence().all { saved.get(it)==expected.get(it) }){"Legal decision mismatch"}
     }
+
+    /** Independent audit of an authenticated local decision; does not mutate or authorize it.
+     * Only the F2 catalog interval is verified, not the separate reporting-deadline policy. */
+    fun auditRevision(context:Context,db:RecordDatabase,receiptId:String,resolver:HistoricalLegalDecisionResolver):HistoricalLegalDecisionResolver.Result =
+        SecureRecords.withRecordLock {
+            val sql=db.readableDatabase
+            sql.beginTransaction()
+            try {
+                val payment=sql.rawQuery("SELECT payload FROM demo_payment_preparation WHERE receiptId=?",arrayOf(receiptId)).use {
+                    require(it.moveToFirst())
+                    JSONObject(SecureRecords(context,"fiskai_demo_payment_preparation",db).openSnapshot(receiptId,it.getString(0)))
+                }
+                require(payment.getString("receiptId")==receiptId && payment.getInt("legalDecisionFormat")==3)
+                verify(context,db,sql,payment)
+                val result=resolver.resolveByDigest(payment.getString("catalogSha256"),payment.getString("eventDate"),
+                    LegalCompliance.Subject.UNKNOWN,LegalCompliance.Scope.STANDARD_DOMESTIC_B2B)
+                val rule=requireNotNull(result.rule)
+                require(rule.version==payment.getString("ruleVersion") && rule.from==payment.getString("ruleFrom") &&
+                    rule.until==payment.getString("ruleUntil"))
+                sql.setTransactionSuccessful()
+                result
+            } finally {sql.endTransaction()}
+        }
 }
