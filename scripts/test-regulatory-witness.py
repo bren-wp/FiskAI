@@ -27,12 +27,19 @@ with tempfile.TemporaryDirectory() as tmp:
     old = b'{"fixture":1}'
     active = (root/"server/contracts/legal-rules.json").read_bytes()
     first = w.attest(db,key,catalog=old,expected_head=w.ZERO)
+    stale = path/"stale.db"
+    with sqlite3.connect(db) as source, sqlite3.connect(stale) as target:
+        source.backup(target)
+    stale.chmod(0o600)
     second = w.attest(db,key,catalog=active,expected_head=first["head"])
     assert second["sequence"] == 2 and second["publicKeySha256"] == pin
     reject(lambda:w.attest(db,key,catalog=b'{"fixture":3}',expected_head=first["head"]))
     reject(lambda:w.attest(db,key,catalog=old,expected_head=second["head"]))
     nonce = "a"*64
-    reply = w.attest(db,key,nonce=nonce)
+    floor=(2,second["head"])
+    reject(lambda:w.attest(stale,key,nonce=nonce,floor=floor))
+    reject(lambda:w.attest(db,key,nonce=nonce,floor=(2,"0"*64)))
+    reply = w.attest(db,key,nonce=nonce,floor=floor)
     (path/"approved.json").write_text(json.dumps({"sequence":2,"head":second["head"],"catalogSha256":w.sha(active)}))
     (path/"reply.json").write_text(json.dumps(reply))
     (path/"public.pem").write_bytes(w.public_key(key))

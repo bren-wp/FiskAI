@@ -11,6 +11,17 @@ SOURCES = {
     "fiscalization-law": "https://narodne-novine.nn.hr/clanci/sluzbeni/2025_06_89_1233.html",
     "e-invoice": "https://porezna.gov.hr/fiskalizacija/bezgotovinski-racuni/eracun",
     "f1-technical": "https://porezna.gov.hr/fiskalizacija/gotovinski-racuni/tehnicki-podaci/o/tehnicki-podaci",
+    "f1-rulebook": "https://narodne-novine.nn.hr/clanci/sluzbeni/full/2025_12_153_2278.html",
+    "f1-rulebook-amendment-2026": "https://narodne-novine.nn.hr/clanci/sluzbeni/2026_09_97_1181.html",
+    "f2-rulebook": "https://narodne-novine.nn.hr/clanci/sluzbeni/2026_01_11_88.html",
+    "f2-technical": "https://porezna.gov.hr/fiskalizacija/bezgotovinski-racuni/fiskalizacija-bezgotovinskih-racuna",
+    "accounting-2026": "https://narodne-novine.nn.hr/clanci/sluzbeni/2026_06_59_727.html",
+    "vat-2026": "https://narodne-novine.nn.hr/clanci/sluzbeni/2026_03_32_377.html",
+    "tax-procedure": "https://narodne-novine.nn.hr/clanci/sluzbeni/2025_12_151_2263.html",
+    "corporate-tax": "https://narodne-novine.nn.hr/clanci/sluzbeni/2025_12_151_2261.html",
+    "eu-vida-directive": "https://eur-lex.europa.eu/legal-content/HR/TXT/?uri=CELEX%3A32025L0516",
+    "eu-vida-regulation": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX%3A32025R0517",
+    "eu-vida-implementing-regulation": "https://eur-lex.europa.eu/legal-content/HR/TXT/?uri=CELEX%3A32025R0518",
 }
 LIMIT = 8 * 1024 * 1024
 

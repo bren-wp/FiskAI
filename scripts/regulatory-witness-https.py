@@ -14,7 +14,8 @@ spec = importlib.util.spec_from_file_location("witness", Path(__file__).with_nam
 w = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(w)
 
-def server(address, database, key, token, tls_cert, tls_key):
+def server(address, database, key, token, tls_cert, tls_key, floor):
+    w.require(floor is not None, "Independent checkpoint floor required for HTTPS witness")
     w.require(w.HEX.fullmatch(token), "Invalid authorized scope")
     w.private_file(database)
     w.private_file(tls_key)
@@ -53,7 +54,7 @@ def server(address, database, key, token, tls_cert, tls_key):
             except (ValueError,TypeError):
                 self.answer(400,{"error":"invalid request"});return
             try:
-                result=w.attest(database,key,nonce=request["nonce"])
+                result=w.attest(database,key,nonce=request["nonce"],floor=floor)
             except Exception:
                 self.answer(503,{"error":"unavailable"});return
             self.answer(200,result)
@@ -78,13 +79,15 @@ def main():
     parser.add_argument("--token-file",required=True,type=Path)
     parser.add_argument("--tls-cert",required=True,type=Path)
     parser.add_argument("--tls-key",required=True,type=Path)
+    parser.add_argument("--floor-sequence",required=True,type=int)
+    parser.add_argument("--floor-head",required=True)
     args=parser.parse_args()
     w.private_file(args.token_file)
     with args.token_file.open("rb") as f:
         secret=f.read(33)
     w.require(len(secret)==32,"Expected 32-byte token file")
     token=secret.hex()
-    with server((args.bind,args.port),args.database,args.key,token,args.tls_cert,args.tls_key) as httpd:
+    with server((args.bind,args.port),args.database,args.key,token,args.tls_cert,args.tls_key,(args.floor_sequence,args.floor_head)) as httpd:
         httpd.serve_forever()
 
 if __name__=="__main__":

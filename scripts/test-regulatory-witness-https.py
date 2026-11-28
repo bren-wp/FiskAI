@@ -35,7 +35,7 @@ with tempfile.TemporaryDirectory() as work:
     approved.write_text(json.dumps({"sequence":1,"head":result["head"],"catalogSha256":w.sha(catalog)}))
     tls_pub=w.openssl("pkey","-in",str(tls),"-pubout","-outform","DER")
     tls_pin="sha256//"+base64.b64encode(bytes.fromhex(w.sha(tls_pub))).decode()
-    server=service.server(("127.0.0.1",0),db,key,secret.hex(),cert,tls)
+    server=service.server(("127.0.0.1",0),db,key,secret.hex(),cert,tls,(1,result["head"]))
     thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
     try:
         url=f"https://localhost:{server.server_port}/v1/latest"

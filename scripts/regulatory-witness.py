@@ -68,7 +68,16 @@ def rows_verified(db):
         result.append((seq, digest, head, line))
     return result
 
-def attest(path, key, *, catalog=None, expected_head=None, nonce=None):
+def enforce_floor(rows, floor):
+    if floor is None:
+        return
+    sequence, head = floor
+    require(type(sequence) is int and 1 <= sequence <= 1000 and isinstance(head, str) and HEX.fullmatch(head),
+            "Invalid independent checkpoint floor")
+    require(len(rows) >= sequence and rows[sequence-1][2] == head, "Witness rollback or fork against independent floor")
+
+
+def attest(path, key, *, catalog=None, expected_head=None, nonce=None, floor=None):
     require((catalog is None) != (nonce is None), "Choose append or fresh read")
     if catalog is not None:
         require(isinstance(catalog, bytes) and 0 < len(catalog) <= MAX and
@@ -84,6 +93,7 @@ def attest(path, key, *, catalog=None, expected_head=None, nonce=None):
         db.execute("BEGIN IMMEDIATE")
         require(db.execute("SELECT pin FROM config").fetchall() == [(pin,)], "Signing key mismatch")
         rows = rows_verified(db)
+        enforce_floor(rows, floor)
         head = rows[-1][2] if rows else ZERO
         if catalog is not None:
             require(expected_head == head, "Stale append or concurrent revision")
