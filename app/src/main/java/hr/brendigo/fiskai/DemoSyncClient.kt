@@ -49,7 +49,8 @@ internal object DemoSyncClient {
         val amount=row.get("amountCents")
         require((amount is Int||amount is Long)&&(amount as Number).toLong() in 1L..999999999999L)
         val date=row.getString("eventDate")
-        val version=requireNotNull(LegalRuleCatalog.rules[LegalCompliance.validateDate(date)]).version
+        LegalCompliance.validateDate(date)
+        val version=requireNotNull(LegalRuleCatalog.resolve(date)).version
         require(row.getString("ruleVersion")==version)
         val deadline=FiscalReportingRules.deadline(FiscalReportingRules.Event.PAYMENT,date)
         require(deadline.date!=null&&row.getString("deadlineDate")==deadline.date)

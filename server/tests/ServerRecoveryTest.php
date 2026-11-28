@@ -46,7 +46,7 @@ try{
     recoveryReject(InvalidArgumentException::class,fn()=>$restore->restore($bad,$archiveKey));
     recoveryReject(InvalidArgumentException::class,fn()=>$restore->restore($archive,random_bytes(32)));
     $counts=$restore->restore($archive,$archiveKey);
-    recoveryCheck(count($counts)===21&&$counts['educ_business_document']===1&&$counts['price_lists']===1);
+    recoveryCheck(count($counts)===22&&$counts['educ_business_document']===1&&$counts['price_lists']===1);
     recoveryCheck((new EducBusinessLedger($target))->read($subject,$document,$storageKey)===$entry);
     $restoredPrice=PriceLists::download($target,$site,'USLUGE',null);
     recoveryCheck($restoredPrice['csv_content']===$price['csv_content']&&$restoredPrice['xml_content']===$price['xml_content']);

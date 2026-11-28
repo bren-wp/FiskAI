@@ -62,8 +62,7 @@ final class DemoSync {
         foreach(['receiptId','evidenceSha256'] as $k)if(!preg_match('/\A[0-9a-f]{64}\z/D',$row[$k]))throw new InvalidArgumentException('Invalid digest.');
         if(!is_int($row['amountCents'])||$row['amountCents']<1||$row['amountCents']>999999999999)throw new InvalidArgumentException('Invalid amount.');
         $deadline=FiscalReportingRules::deadline('PAYMENT',$row['eventDate']);
-        $rules=require __DIR__.'/LegalRuleCatalog.php';
-        $rule=$rules[(int)substr($row['eventDate'],0,4)]??null;
+        $rule=LegalCompliance::ruleForDate($row['eventDate']);
         if($rule===null||$row['ruleVersion']!==$rule['version']||$row['deadlineDate']!==$deadline['date'])
             throw new InvalidArgumentException('Unreviewed rule or deadline.');
         $ordered=[];foreach($keys as $k)$ordered[$k]=$row[$k];

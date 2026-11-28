@@ -35,3 +35,9 @@
 
 - Kotlin i PHP koriste zajednički katalog s početkom uključivo i završetkom isključivo. Podržane su odvojene revizije unutar iste godine; praznine zahtijevaju pregled. Postojeća pravila i identifikatori 2026./2027. ostaju nepromijenjeni.
 - Dodani su sintetički regresijski testovi strukture kataloga; produkcijsko odobrenje nije dodano.
+
+### Zakonska evidencija i regresija
+
+- Ispravljeni preostali godišnji pristupi katalogu u fiskalnom outboxu i DEMO sinkronizaciji (Android/PHP).
+- Dodana migracija 013 i HMAC autentificirani F2 EDUC snapshot pravila/odluke u istoj transakciji. Postojeći dokumenti se ne mijenjaju; nema produkcijske autorizacije.
+- PHP i Kotlin provjeravaju 10.276 odluka prema istom determinističkom kontrolnom sažetku.

@@ -40,6 +40,7 @@ jobs:
       - run: python3 scripts/check-legal-catalog.py
       - run: python3 scripts/test-legal-catalog.py
       - run: php server/tests/LegalComplianceTest.php
+      - run: php server/tests/LegalParityTest.php
       - run: php server/tests/TaxStatusHistoryTest.php
       - run: php server/tests/FiscalReportingRulesTest.php
       - run: php server/tests/F2ProviderGrantTest.php
@@ -47,6 +48,7 @@ jobs:
       - run: php server/tests/PriceDownloadTest.php
       - run: php server/tests/DatabaseTest.php
       - run: php server/tests/SchemaMigratorTest.php
+      - run: php server/tests/LegalDecisionLedgerTest.php
       - run: php server/tests/FiscalEventOutboxTest.php
       - run: php server/tests/DemoSyncTest.php
       - run: php server/tests/DemoDeviceProofTest.php

@@ -4,6 +4,7 @@ require_once __DIR__.'/F2InvoicePreflight.php';
 require_once __DIR__.'/F2ValidationEvidence.php';
 require_once __DIR__.'/F2KpdRelease.php';
 require_once __DIR__.'/F2ProviderGrant.php';
+require_once __DIR__.'/LegalDecisionLedger.php';
 
 /** Durable, review-only F2 outbox. No provider call, fiscal acknowledgement or production route. */
 final class F2EducIntake {
@@ -70,9 +71,14 @@ final class F2EducIntake {
             $nonce=random_bytes(12);$tag='';
             $cipher=openssl_encrypt($plain,'aes-256-gcm',$this->key,OPENSSL_RAW_DATA,$nonce,$tag,self::aad($r),16);
             if($cipher===false||strlen($tag)!==16)throw new RuntimeException('F2 encryption failed.');
+            $s=$this->db->prepare('SELECT 1 FROM f2_educ_intake WHERE subject_id=? AND document_id=?');
+            $s->execute([$subject,$id]);$existed=$s->fetchColumn()!==false;
             $s=$this->db->prepare('INSERT INTO f2_educ_intake(subject_id,document_id,direction,identity_sha256,document_sha256,review_sha256,sealed_evidence,created_at) VALUES (?,?,?,?,?,?,?,UTC_TIMESTAMP(6)) ON DUPLICATE KEY UPDATE document_id=document_id');
             $s->execute([...array_values($r),base64_encode($nonce.$tag.$cipher)]);
             if($this->read($subject,$id)!==$e)throw new DomainException('Immutable F2 evidence conflict.');
+            $legal=new LegalDecisionLedger($this->db,$this->key);
+            if(!$existed)$legal->append($subject,$id,$review);
+            else $legal->read($subject,$id); // legacy rows remain unchanged; never fabricate historical rule snapshots
             $this->db->commit();
             return ['state'=>'REVIEW_REQUIRED','documentId'=>$id,'documentSha256'=>$r['document_sha256'],'reviewSha256'=>$r['review_sha256'],'dispatchAuthorized'=>false];
         }catch(Throwable $e){if($this->db->inTransaction())$this->db->rollBack();throw $e;}
