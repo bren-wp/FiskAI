@@ -17,3 +17,7 @@ Offline request XMLDSig foundation, independent xmlsec verification in CI, Andro
 
 ## v0.1.0 packaging
 Android remains at app/; public site at web/public; backend, SQL and CLI at server/; vector brand at brending/. Separate demo applicationId and label; standard APK is debug-signed, release AAB unsigned. Release is explicitly a testing prerelease until production gates pass. Original PNG reference transfer, actual screenshots and remaining business/fiscal gates are not complete.
+
+## Current v0.1.1 development gates
+
+Regulatory history, separate Android ledger and historical restore now have concrete implementations with synthetic regression tests. Operator-pinned archive import, separate witness quorum and NN/Cellar discovery are implemented but require current CI results and independently configured real infrastructure. Android runtime OSV lookup is a release candidate gate; complete build/server dependency inventory, manual security review, dead-code/semantic-clone audits, full legal 2027 review and production acceptance remain open. No original reference PNG or actual web/admin screenshots are fabricated. All 19 phases remain required.

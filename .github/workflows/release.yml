@@ -49,6 +49,8 @@ jobs:
             echo "Expected unsigned AAB"; exit 1
           fi
           gradle --no-configuration-cache -I scripts/runtime-sbom.init.gradle :app:fiskaiRuntimeSbom
+          python3 scripts/test-audit-runtime-dependencies.py
+          python3 scripts/audit-runtime-dependencies.py dist/FiskAI-android.cdx.json dist/FiskAI-runtime-osv.json
           python3 scripts/check-room-schema.py app/build/room-schemas
           cp app/build/room-schemas/compileReleaseJavaWithJavac/hr.brendigo.fiskai.room.FiscalRoomDatabase/11.json dist/FiskAI-room-schema.json
           python3 scripts/package-source.py dist
@@ -57,6 +59,14 @@ jobs:
           cp CHANGELOG.md dist/CHANGELOG.md
           cp UPGRADE.md dist/UPGRADE.md
           (cd dist && sha256sum *.apk *.aab *.zip *.md *.json > SHA256SUMS.txt)
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: FiskAI-runtime-audit
+          path: |
+            dist/FiskAI-android.cdx.json
+            dist/FiskAI-runtime-osv.json
+          if-no-files-found: warn
       - uses: actions/upload-artifact@v6
         with:
           name: FiskAI-candidate-packages

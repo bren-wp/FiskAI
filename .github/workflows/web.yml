@@ -2,10 +2,10 @@ name: Web
 on:
   workflow_call:
   pull_request:
-    paths: ['web/**','server/**','scripts/test-demo-sync-https.py','scripts/educ-witness.py','scripts/test-educ-witness.py','scripts/educ-witness-https.py','scripts/test-educ-witness-https.py','scripts/verify-f2-bundle.py','scripts/test-f2-bundle.py','.github/workflows/web.yml','scripts/check-legal-catalog.py','app/src/main/java/hr/brendigo/fiskai/LegalRuleCatalog.kt']
+    paths: ['web/**','server/**','scripts/regulatory-*.py','scripts/test-regulatory-*.py','app/src/androidTest/assets/regulatory-vector.json','scripts/test-demo-sync-https.py','scripts/educ-witness.py','scripts/test-educ-witness.py','scripts/educ-witness-https.py','scripts/test-educ-witness-https.py','scripts/verify-f2-bundle.py','scripts/test-f2-bundle.py','.github/workflows/web.yml','scripts/check-legal-catalog.py','app/src/main/java/hr/brendigo/fiskai/LegalRuleCatalog.kt']
   push:
     branches: [main, feature/native-alpha]
-    paths: ['web/**','server/**','scripts/test-demo-sync-https.py','scripts/educ-witness.py','scripts/test-educ-witness.py','scripts/educ-witness-https.py','scripts/test-educ-witness-https.py','scripts/verify-f2-bundle.py','scripts/test-f2-bundle.py','.github/workflows/web.yml']
+    paths: ['web/**','server/**','scripts/regulatory-*.py','scripts/test-regulatory-*.py','app/src/androidTest/assets/regulatory-vector.json','scripts/test-demo-sync-https.py','scripts/educ-witness.py','scripts/test-educ-witness.py','scripts/educ-witness-https.py','scripts/test-educ-witness-https.py','scripts/verify-f2-bundle.py','scripts/test-f2-bundle.py','.github/workflows/web.yml']
 permissions:
   contents: read
 jobs:
