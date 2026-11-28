@@ -42,6 +42,7 @@ jobs:
       - run: php server/tests/LegalComplianceTest.php
       - run: php server/tests/LegalParityTest.php
       - run: php server/tests/RegulatoryTrustAnchorTest.php
+      - run: python3 scripts/test-regulatory-witness.py
       - run: php server/tests/TaxStatusHistoryTest.php
       - run: php server/tests/FiscalReportingRulesTest.php
       - run: php server/tests/F2ProviderGrantTest.php
