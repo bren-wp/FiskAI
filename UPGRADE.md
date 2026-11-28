@@ -41,3 +41,7 @@ i preostale migracijske uvjete potražite u docs/ROOM.md i docs/BACKUP.md.
 Ove upute nisu dokaz uspješne nadogradnje svake povijesne verzije.
 Fizička provjera migracije, oporavka i produkcijske fiskalizacije ostaje uvjet
 za produkcijsku objavu.
+
+## Room schema 11
+
+Migracija 10 → 11 dodaje zasebnu šifriranu tablicu `legal_decision_ledger`. Postojeći poslovni redci ostaju netaknuti; legacy odluke ne dobivaju izmišljenu regulatornu povijest. Prije nadogradnje napravite šifriranu sigurnosnu kopiju. Povratak na stariji APK nakon migracije nije podržan.
