@@ -6,6 +6,7 @@ require_once __DIR__.'/../src/EducBusinessLedger.php';
 require_once __DIR__.'/../src/DemoSync.php';
 require_once __DIR__.'/../src/PriceLists.php';
 require_once __DIR__.'/../src/FiscalEventOutbox.php';
+require_once __DIR__.'/../src/F2EducIntake.php';
 function recoveryCheck(bool $ok):void {if(!$ok)throw new RuntimeException('Server recovery test failed.');}
 function recoveryReject(string $type,callable $call):void {
     try{$call();}catch(Throwable $e){if($e instanceof $type)return;throw $e;}
@@ -36,6 +37,27 @@ try{
     PriceLists::publish($source,['site'=>$site,'kind'=>'USLUGE','identifier'=>'12345678903','location'=>'Test',
         'rows'=>[['naziv'=>'Čišćenje','maloprodajna_cijena'=>'12.50','poseban_oblik_prodaje'=>false,'bazna_cijena'=>'10.00']]]);
     $price=PriceLists::download($source,$site,'USLUGE',null);
+    // Synthetic authenticated evidence exercises both the F2 read guard and full restore.
+    $f2id='b5000000-0000-4000-8000-000000000001';$f2key=random_bytes(32);
+    $xml='<synthetic-fixture/>';$docHash=hash('sha256',$xml);
+    $history=new TaxStatusHistory([['from'=>'2026-01-01','until'=>null,'subject'=>'VAT']]);
+    $review=['documentSha256'=>$docHash,'assessment'=>$history->assess('2027-01-01','STANDARD_DOMESTIC_B2B'),
+        'deadline'=>FiscalReportingRules::deadline('ISSUED','2027-01-01')];
+    $evidence=['xml'=>$xml,'review'=>$review,'legalDecisionFormat'=>1];
+    $plain=json_encode($evidence,JSON_THROW_ON_ERROR);
+    $reviewHash=hash('sha256',$plain);$identity=hash('sha256','synthetic identity');
+    $aad=implode("\0",['FISKAI-F2-EDUC-INTAKE-V1',$subject,$f2id,'ISSUED',$identity,$docHash,$reviewHash]);
+    $nonce=random_bytes(12);$tag='';
+    $cipher=openssl_encrypt($plain,'aes-256-gcm',$f2key,OPENSSL_RAW_DATA,$nonce,$tag,$aad,16);
+    recoveryCheck(is_string($cipher)&&strlen($tag)===16);
+    $source->beginTransaction();
+    try{
+        $s=$source->prepare("INSERT INTO f2_educ_intake(subject_id,document_id,direction,identity_sha256,document_sha256,review_sha256,sealed_evidence,created_at) VALUES (?,?,'ISSUED',?,?,?,?,UTC_TIMESTAMP(6))");
+        $s->execute([$subject,$f2id,$identity,$docHash,$reviewHash,base64_encode($nonce.$tag.$cipher)]);
+        $snapshot=(new LegalDecisionLedger($source,$f2key))->append($subject,$f2id,$review);
+        $source->commit();
+    }catch(Throwable $e){if($source->inTransaction())$source->rollBack();throw $e;}
+    recoveryCheck((new F2EducIntake($source,$f2key))->read($subject,$f2id)===$evidence);
     $archive=(new ServerRecovery($source))->export($archiveKey);
     $restore=new ServerRecovery($target);
     putenv('FISKAI_SERVER_RECOVERY_MODE=0');
@@ -48,6 +70,16 @@ try{
     $counts=$restore->restore($archive,$archiveKey);
     recoveryCheck(count($counts)===22&&$counts['educ_business_document']===1&&$counts['price_lists']===1);
     recoveryCheck((new EducBusinessLedger($target))->read($subject,$document,$storageKey)===$entry);
+    recoveryCheck($counts['legal_decision_ledger']===1&&$counts['f2_educ_intake']===1);
+    recoveryCheck((new LegalDecisionLedger($target,$f2key))->read($subject,$f2id)===$snapshot);
+    $intake=new F2EducIntake($target,$f2key);
+    recoveryCheck($intake->read($subject,$f2id)===$evidence);
+    $target->beginTransaction();
+    try{
+        $s=$target->prepare('DELETE FROM legal_decision_ledger WHERE subject_id=? AND document_id=?');$s->execute([$subject,$f2id]);
+        recoveryReject(RuntimeException::class,fn()=>$intake->read($subject,$f2id));
+    }finally{$target->rollBack();}
+    recoveryCheck($intake->read($subject,$f2id)===$evidence);
     $restoredPrice=PriceLists::download($target,$site,'USLUGE',null);
     recoveryCheck($restoredPrice['csv_content']===$price['csv_content']&&$restoredPrice['xml_content']===$price['xml_content']);
     recoveryCheck((new FiscalEventOutbox($target))->read('EDUC',$subject,$event)['state']==='UNCERTAIN');

@@ -30,6 +30,11 @@ final class F2EducIntake {
         if($plain===false||!hash_equals($r['review_sha256'],hash('sha256',$plain)))throw new RuntimeException('F2 evidence authentication failed.');
         $e=json_decode($plain,true,32,JSON_THROW_ON_ERROR);
         if(!hash_equals($r['document_sha256'],hash('sha256',$e['xml'])))throw new RuntimeException('F2 document mismatch.');
+        $snapshot=(new LegalDecisionLedger($this->db,$this->key))->read($subject,$id);
+        if(array_key_exists('legalDecisionFormat',$e)&&($e['legalDecisionFormat']!==1||$snapshot===null))
+            throw new RuntimeException('Required legal decision missing.');
+        if($snapshot!==null&&($snapshot['assessment']!==$e['review']['assessment']||$snapshot['deadline']!==$e['review']['deadline']))
+            throw new RuntimeException('Legal decision does not match sealed review.');
         return $e;
     }
     /** Trust configuration must be independently provisioned by an authorized operator.
@@ -63,6 +68,12 @@ final class F2EducIntake {
                 'validationStatement'=>$validationStatement,'validationSignature'=>base64_encode($validationSignature),
                 'grant'=>$grant,'grantStatement'=>$grantStatement,'grantSignature'=>base64_encode($grantSignature)];
             if($hrSvrl!==null)$e['hrSvrl']=$hrSvrl;
+            $s=$this->db->prepare('SELECT 1 FROM f2_educ_intake WHERE subject_id=? AND document_id=?');
+            $s->execute([$subject,$id]);$existed=$s->fetchColumn()!==false;
+            $previous=$existed?$this->read($subject,$id):null;
+            // Bind the existence requirement inside the authenticated F2 ciphertext.
+            // Legacy evidence is not changed by an idempotent retry.
+            if(!$existed||array_key_exists('legalDecisionFormat',$previous??[]))$e['legalDecisionFormat']=1;
             $plain=json_encode($e,JSON_THROW_ON_ERROR);
             if(strlen($plain)>4194304)throw new InvalidArgumentException('F2 evidence capacity exceeded.');
             $r=['subject_id'=>$subject,'document_id'=>$id,'direction'=>$direction,
@@ -71,14 +82,10 @@ final class F2EducIntake {
             $nonce=random_bytes(12);$tag='';
             $cipher=openssl_encrypt($plain,'aes-256-gcm',$this->key,OPENSSL_RAW_DATA,$nonce,$tag,self::aad($r),16);
             if($cipher===false||strlen($tag)!==16)throw new RuntimeException('F2 encryption failed.');
-            $s=$this->db->prepare('SELECT 1 FROM f2_educ_intake WHERE subject_id=? AND document_id=?');
-            $s->execute([$subject,$id]);$existed=$s->fetchColumn()!==false;
             $s=$this->db->prepare('INSERT INTO f2_educ_intake(subject_id,document_id,direction,identity_sha256,document_sha256,review_sha256,sealed_evidence,created_at) VALUES (?,?,?,?,?,?,?,UTC_TIMESTAMP(6)) ON DUPLICATE KEY UPDATE document_id=document_id');
             $s->execute([...array_values($r),base64_encode($nonce.$tag.$cipher)]);
+            if(!$existed)(new LegalDecisionLedger($this->db,$this->key))->append($subject,$id,$review);
             if($this->read($subject,$id)!==$e)throw new DomainException('Immutable F2 evidence conflict.');
-            $legal=new LegalDecisionLedger($this->db,$this->key);
-            if(!$existed)$legal->append($subject,$id,$review);
-            else $legal->read($subject,$id); // legacy rows remain unchanged; never fabricate historical rule snapshots
             $this->db->commit();
             return ['state'=>'REVIEW_REQUIRED','documentId'=>$id,'documentSha256'=>$r['document_sha256'],'reviewSha256'=>$r['review_sha256'],'dispatchAuthorized'=>false];
         }catch(Throwable $e){if($this->db->inTransaction())$this->db->rollBack();throw $e;}
