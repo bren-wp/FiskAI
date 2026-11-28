@@ -1,9 +1,10 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__.'/../src/RegulatoryTrustAnchor.php';
+require_once __DIR__.'/../src/RegulatoryRemoteCheckpoint.php';
 
 // Only independently provisioned operator material. No key generation or trust-on-first-use.
-if(PHP_SAPI!=='cli'||$argc!==2)throw new InvalidArgumentException('Usage: verify-regulatory-history.php HISTORY_DIRECTORY');
+if(PHP_SAPI!=='cli'||!in_array($argc,[2,3],true)||($argc===3&&$argv[2]!=='--require-quorum'))throw new InvalidArgumentException('Usage: verify-regulatory-history.php HISTORY_DIRECTORY [--require-quorum]');
 function bounded(string $file,int $limit):string {
     if(!is_file($file)||!is_readable($file))throw new RuntimeException('Trust material unavailable.');
     $data=file_get_contents($file,false,null,0,$limit+1);
@@ -25,4 +26,8 @@ for($i=1;$i<=(int)$sequence;$i++){
 }
 $result=RegulatoryTrustAnchor::verify(bounded($directory.'/history.txt',1048576),bounded($directory.'/history.sig',128),
     bounded($publicFile,8192),$pin,(int)$sequence,$head,$catalogs);
+if($argc===3){
+    RegulatoryRemoteCheckpoint::requireIndependentQuorum($result);
+    $result['independentWitnessQuorumVerified']=true;
+}
 echo json_encode($result,JSON_THROW_ON_ERROR).PHP_EOL;

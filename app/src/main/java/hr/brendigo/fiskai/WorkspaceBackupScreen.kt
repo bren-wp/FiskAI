@@ -28,7 +28,7 @@ internal fun WorkspaceBackupScreen(onBusy:(Boolean)->Unit,onRestored:()->Unit) {
         scope.launch {
             try {
                 val result=withContext(Dispatchers.IO) { runCatching {
-                    val raw=context.contentResolver.openInputStream(uri)?.use(RegulatoryRecoveryEvidence::readPackage)
+                    val raw=context.contentResolver.openInputStream(uri)?.use { RegulatoryRecoveryEvidence.readPackage(it) }
                         ?: error("Datoteka nije dostupna")
                     RegulatoryRecoveryEvidence(context).importPinnedPackage(raw)
                 } }

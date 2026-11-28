@@ -13,19 +13,37 @@ final class RegulatoryRemoteCheckpoint {
     }
     /** Only trusted operator configuration may select the independent witness host. */
     public static function requireFresh(array $current):void {
-        $url=getenv('FISKAI_REGULATORY_WITNESS_URL');
-        $pin=getenv('FISKAI_REGULATORY_PUBLIC_KEY_SHA256');
-        $tlsPin=getenv('FISKAI_REGULATORY_WITNESS_TLS_SPKI');
+        self::verifyHost($current,'FISKAI_REGULATORY_');
+    }
+    /** Both independently operated hosts must sign the exact same checkpoint. */
+    public static function requireIndependentQuorum(array $current):void {
+        $primary='FISKAI_REGULATORY_';$secondary='FISKAI_REGULATORY_SECONDARY_';
+        foreach(['WITNESS_URL','PUBLIC_KEY_SHA256','WITNESS_TLS_SPKI','WITNESS_CA_SHA256'] as $name){
+            $a=getenv($primary.$name);$b=getenv($secondary.$name);
+            if(!is_string($a)||!is_string($b)||$a===''||$b===''||hash_equals($a,$b))
+                throw new LogicException('Separate witness trust domains required.');
+        }
+        $a=parse_url((string)getenv($primary.'WITNESS_URL'),PHP_URL_HOST);
+        $b=parse_url((string)getenv($secondary.'WITNESS_URL'),PHP_URL_HOST);
+        if(!is_string($a)||!is_string($b)||strtolower(rtrim($a,'.'))===strtolower(rtrim($b,'.')))
+            throw new LogicException('Separate witness hosts required.');
+        self::verifyHost($current,$primary);
+        self::verifyHost($current,$secondary);
+    }
+    private static function verifyHost(array $current,string $prefix):void {
+        $url=getenv($prefix.'WITNESS_URL');
+        $pin=getenv($prefix.'PUBLIC_KEY_SHA256');
+        $tlsPin=getenv($prefix.'WITNESS_TLS_SPKI');
         if(!is_string($url)||strlen($url)>512||!preg_match('~\Ahttps://[a-zA-Z0-9.-]+(?::[0-9]{1,5})?/v1/latest\z~D',$url)||
             !is_string($pin)||!preg_match('/\A[0-9a-f]{64}\z/D',$pin)||
             !is_string($tlsPin)||!preg_match('~\Asha256//[A-Za-z0-9+/]{43}=\z~D',$tlsPin)||!extension_loaded('curl'))
             throw new LogicException('Independent HTTPS witness not configured.');
-        $public=self::file('FISKAI_REGULATORY_PUBLIC_KEY_FILE',8192);
+        $public=self::file($prefix.'PUBLIC_KEY_FILE',8192);
         if(!hash_equals($pin,hash('sha256',$public)))throw new LogicException('Witness public key mismatch.');
-        $ca=self::file('FISKAI_REGULATORY_WITNESS_CA',1048576);
-        $caPin=getenv('FISKAI_REGULATORY_WITNESS_CA_SHA256');
+        $ca=self::file($prefix.'WITNESS_CA',1048576);
+        $caPin=getenv($prefix.'WITNESS_CA_SHA256');
         if(!is_string($caPin)||!hash_equals($caPin,hash('sha256',$ca)))throw new LogicException('Witness CA mismatch.');
-        $token=bin2hex(RecoveryKeyFile::read('FISKAI_REGULATORY_WITNESS_TOKEN_FILE'));
+        $token=bin2hex(RecoveryKeyFile::read($prefix.'WITNESS_TOKEN_FILE'));
         $nonce=bin2hex(random_bytes(32));
         $payload=json_encode(['nonce'=>$nonce],JSON_THROW_ON_ERROR);
         $response='';$handle=curl_init($url);
