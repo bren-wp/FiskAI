@@ -7,6 +7,10 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
 }
+// Operator-pinned public recovery checkpoint. Never sourced from a workspace backup.
+val regulatoryCheckpoint = providers.gradleProperty("fiskaiRegulatoryCheckpoint").orElse("").get()
+require(regulatoryCheckpoint.isEmpty() || regulatoryCheckpoint.matches(Regex("[1-9][0-9]{0,3}:[0-9a-f]{64}:[0-9a-f]{64}:[0-9a-f]{64}")) &&
+    regulatoryCheckpoint.substringBefore(':').toInt() <= 1000) { "Invalid independent regulatory checkpoint" }
 android {
     namespace = "hr.brendigo.fiskai"
     testBuildType = providers.gradleProperty("fiskaiInstrumentedBuildType").orElse("debug").get()
@@ -19,6 +23,7 @@ android {
         versionName = "0.1.1"
         manifestPlaceholders["appLabel"] = "FiskAI"
         buildConfigField("boolean", "DEMO_MODE", "false")
+        buildConfigField("String", "REGULATORY_CHECKPOINT", "\""+regulatoryCheckpoint+"\"")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }

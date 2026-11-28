@@ -18,6 +18,21 @@ internal class RegulatoryRecoveryEvidence(context:Context,db:RecordDatabase=Reco
         private const val ID="regulatory-history-v1"
         private const val MAX=8*1024*1024
         private const val SEALED_MAX=12*1024*1024
+        internal fun configuredTrust():Trust? {
+            val raw=BuildConfig.REGULATORY_CHECKPOINT
+            if(raw.isEmpty())return null
+            val parts=raw.split(':')
+            require(parts.size==4 && parts.drop(1).all{it.matches(Regex("[0-9a-f]{64}"))})
+            return Trust(parts[0].toInt().also{require(it in 1..1000)},parts[1],parts[2],parts[3])
+        }
+        internal fun readPackage(input:java.io.InputStream):String {
+            val out=ByteArrayOutputStream();val buffer=ByteArray(8192)
+            while(true){
+                val n=input.read(buffer);if(n==-1)break
+                require(n>0&&n<=MAX-out.size());out.write(buffer,0,n)
+            }
+            return out.toByteArray().toString(Charsets.UTF_8)
+        }
         private val fields=setOf("sequence","head","catalogSha256","publicKeySha256","publicKey",
             "history","historySignature","catalogs","nonce","statement","signature")
     }
@@ -87,6 +102,15 @@ internal class RegulatoryRecoveryEvidence(context:Context,db:RecordDatabase=Reco
         validate(read(),expected)
         resolver
     }
+    /** Offline operator package, pinned by the APK configuration. The nonce is archived,
+     * not a new network challenge. No claim of current freshness is made. */
+    fun importPinnedPackage(raw:String):HistoricalLegalDecisionResolver {
+        val expected=requireNotNull(configuredTrust()){ "Independent regulatory trust not configured" }
+        require(raw.toByteArray(Charsets.UTF_8).size in 1..MAX)
+        return install(raw,expected,JSONObject(raw).getString("nonce"))
+    }
+    fun openConfigured():HistoricalLegalDecisionResolver = open(requireNotNull(configuredTrust()){
+        "Independent regulatory trust not configured" })
     fun open(expected:Trust):HistoricalLegalDecisionResolver=SecureRecords.withRecordLock {
         validate(read(),expected)
     }

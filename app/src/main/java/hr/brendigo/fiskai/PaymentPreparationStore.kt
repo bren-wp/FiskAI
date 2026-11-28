@@ -46,7 +46,7 @@ internal object PaymentPreparationStore {
             c.getString(1) to total
         }
         val rule=if(catalogDigest==LegalRuleCatalog.CATALOG_SHA256) requireNotNull(LegalRuleCatalog.resolve(receipt.date))
-            else requireNotNull(requireNotNull(resolver){"Independently verified historical catalog required"}
+            else requireNotNull((resolver?:RegulatoryRecoveryEvidence(context,db).openConfigured())
                 .resolveByDigest(catalogDigest,receipt.date,LegalCompliance.Subject.UNKNOWN,
                     LegalCompliance.Scope.STANDARD_DOMESTIC_B2B).rule)
         // Frozen nominal monthly payment policy for formats 0–3; not a legal authorization.

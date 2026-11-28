@@ -22,6 +22,20 @@ internal fun WorkspaceBackupScreen(onBusy:(Boolean)->Unit,onRestored:()->Unit) {
     var status by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     fun working(value:Boolean) { busy=value;onBusy(value) }
+    val regulatoryConfigured=RegulatoryRecoveryEvidence.configuredTrust()!=null
+    val regulatoryPicker=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if(uri==null) { working(false);return@rememberLauncherForActivityResult }
+        scope.launch {
+            try {
+                val result=withContext(Dispatchers.IO) { runCatching {
+                    val raw=context.contentResolver.openInputStream(uri)?.use(RegulatoryRecoveryEvidence::readPackage)
+                        ?: error("Datoteka nije dostupna")
+                    RegulatoryRecoveryEvidence(context).importPinnedPackage(raw)
+                } }
+                status=if(result.isSuccess) "Povijesna regulatorna potvrda je provjerena i spremljena." else "Potvrda nije prihvaćena. Provjerite službeno dostavljeni paket i konfiguraciju aplikacije."
+            }finally{working(false)}
+        }
+    }
     val exportPicker=rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
         if(uri==null) { working(false);return@rememberLauncherForActivityResult }
         val secret=password.toCharArray()
@@ -70,6 +84,10 @@ internal fun WorkspaceBackupScreen(onBusy:(Boolean)->Unit,onRestored:()->Unit) {
         Text("Kopija obuhvaća nacrte, kupce, dobavljače, artikle, poslovni subjekt i fiskalne postavke.")
         Text("Uključuje DEMO račune i brojače, stanje i povijest zaliha te CIS testni dnevnik. Uključuje ulazne eRačune, bankovne stavke, evidenciju primitaka i lokalne Room statuse zahtjeva. Certifikati i privatni ključevi nisu uključeni. Ne pokrećite istu obnovljenu kopiju na više uređaja.")
         Text("Vraćanje je moguće samo u prazan radni prostor iste vrste aplikacije (DEMO ili redovna). Postojeći podaci neće biti prepisani.")
+        if(regulatoryConfigured) {
+            Text("Za obnovu starijih odluka uvezite neovisno dostavljenu potpisanu regulatornu povijest. Arhivirana potvrda ne odobrava slanje fiskalnih dokumenata.")
+            OutlinedButton(enabled=!busy,onClick={working(true);regulatoryPicker.launch(arrayOf("application/json","application/octet-stream"))},modifier=Modifier.fillMaxWidth()) { Text("Uvezi regulatornu potvrdu") }
+        }
         if(Build.VERSION.SDK_INT<26) {
             Text("Prijenosna kopija zahtijeva Android 8 ili noviji.")
         } else {
