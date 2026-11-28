@@ -7,7 +7,7 @@ import androidx.room.Room;
 import androidx.room.RoomDatabase;
 import androidx.sqlite.db.SupportSQLiteDatabase;
 
-@Database(entities={FiscalDocument.class,FiscalQueueEntry.class,IncomingInvoiceRow.class,BankTransactionRow.class,ReceiptEventRow.class,PaymentPreparationRow.class},version=10,exportSchema=true)
+@Database(entities={FiscalDocument.class,FiscalQueueEntry.class,IncomingInvoiceRow.class,BankTransactionRow.class,ReceiptEventRow.class,PaymentPreparationRow.class,LegalDecisionRow.class},version=11,exportSchema=true)
 public abstract class FiscalRoomDatabase extends RoomDatabase {
     public abstract FiscalQueueDao queue();
     public abstract IncomingInvoiceDao incoming();
@@ -35,6 +35,9 @@ public abstract class FiscalRoomDatabase extends RoomDatabase {
             .addMigrations(new androidx.room.migration.Migration(9,10) {
                 @Override public void migrate(@NonNull SupportSQLiteDatabase db) { PaymentPreparationSchema.allowMultiple(db::execSQL); }
             })
+            .addMigrations(new androidx.room.migration.Migration(10,11) {
+                @Override public void migrate(@NonNull SupportSQLiteDatabase db) { LegalDecisionSchema.create(db::execSQL); }
+            })
             .addCallback(new Callback() {
                 @Override public void onCreate(@NonNull SupportSQLiteDatabase db) {
                     FiscalSchema.createTriggers(db::execSQL);
@@ -42,6 +45,7 @@ public abstract class FiscalRoomDatabase extends RoomDatabase {
                     ReceiptSchema.create(db::execSQL);
                     PaymentPreparationSchema.create(db::execSQL);
                     PaymentPreparationSchema.allowMultiple(db::execSQL);
+                    LegalDecisionSchema.create(db::execSQL);
                 }
             }).build();
     }

@@ -185,3 +185,7 @@ Dodano je zasebno read-only TLS sučelje `scripts/regulatory-witness-https.py` (
 ### Povijesno razrješavanje odluka
 
 `HistoricalLegalDecisionResolver` provjerava potpis cijele povijesti i neovisni latest checkpoint te zahtijeva izričiti redni broj i SHA-256 kataloga za povijesnu procjenu. Podržava samo postojeću usku shemu domaćeg B2B pravila i odbija nepoznate sheme, neispravne intervale i nepodudarne otiske. PHP evaluator dijele aktivno i povijesno razrješavanje. Sintetički test različitih revizija nije zakonska tvrdnja. Nije još integrirano u sve evidencije: postojeći F2 zapisi nemaju obvezni identitet revizije kataloga i ne dopunjuju se retroaktivno. Android resolver i zaseban Room ledger ostaju otvoreni.
+
+### Room schema 11: zasebna evidencija DEMO zakonskih odluka
+
+Migracija 10→11 dodaje `legal_decision_ledger` bez mijenjanja postojećih redaka. SQLiteOpenHelper i Room dijele DDL. Novi payment format 2 zahtijeva zasebni AES-GCM zapis, vezan stranim ključem na nepromjenjivu pripremu naplate. Čitanje provjerava sadržaj i postojanje zapisa. Backup format 5 čuva cijeli autentificirani payment snapshot; restore u istoj transakciji rekonstruira točan ledger sadržaj za format 2, bez dopisivanja legacy formatima 0/1. Ovo je lokalna baseline procjena (`LOCAL_BASELINE_REVIEW_REQUIRED`), ne eksterno odobren regulatorni checkpoint. Povijesno razrješavanje nakon izmjene kataloga i dalje traži zasebnu integraciju. Testovi obuhvaćaju migracije, zabranu UPDATE/DELETE/REPLACE i obnovu zapisa.

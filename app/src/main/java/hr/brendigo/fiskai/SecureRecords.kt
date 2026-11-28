@@ -98,7 +98,7 @@ internal class SecureRecords(
             val sql=database.writableDatabase
             sql.beginTransaction()
             try {
-                for(table in listOf("demo_receipt","demo_sequence","stock_event","stock_balance","cis_echo","fiscal_document","fiscal_outbox","demo_payment_preparation")) {
+                for(table in listOf("demo_receipt","demo_sequence","stock_event","stock_balance","cis_echo","fiscal_document","fiscal_outbox","demo_payment_preparation","legal_decision_ledger")) {
                     sql.rawQuery("SELECT 1 FROM "+table+" LIMIT 1",null).use { require(!it.moveToFirst()) }
                 }
                 // Refuse unknown records, including certificates, instead of overwriting them.

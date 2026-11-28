@@ -53,7 +53,7 @@ internal object PaymentPreparationStore {
             .put("receiptDigest",receiptDigest).put("evidenceSha256",FiscalCutover.digest("DEMO_PAYMENT_V1\u0000"+digest+"\u0000"+receiptDigest))
             .put("eventDate",receipt.date).put("amountCents",receipt.cents).put("ruleVersion",rule.version)
             .put("deadlineDate",requireNotNull(deadline.date))
-            .put("legalDecisionFormat",1).put("ruleFrom",rule.from).put("ruleUntil",rule.until)
+            .put("legalDecisionFormat",2).put("ruleFrom",rule.from).put("ruleUntil",rule.until)
             .put("legalSource","https://narodne-novine.nn.hr/clanci/sluzbeni/2025_06_89_1233.html")
             .put("deadlineKind",deadline.kind.name),total)
     }
@@ -70,6 +70,7 @@ internal object PaymentPreparationStore {
             // Legacy evidence is not retroactively supplemented.
             for (key in listOf("legalDecisionFormat","ruleFrom","ruleUntil","legalSource","deadlineKind")) expected.json.remove(key)
         }
+        else if(j.getInt("legalDecisionFormat")==1)expected.json.put("legalDecisionFormat",1)
         require(same(j,expected.json))
         return expected
     }
@@ -79,6 +80,7 @@ internal object PaymentPreparationStore {
             put("receiptId",id);put("documentId",j.getString("documentId"));put("eventId",j.getString("eventId"))
             put("payload",SecureRecords(context,NS,db).sealSnapshot(id,j.toString()))
         })
+        LegalDecisionStore.insert(context,db,sql,j)
     }
 
     private fun validateTotals(rows:List<Checked>,legacyFull:Boolean=false):Map<String,Long> {
@@ -103,6 +105,7 @@ internal object PaymentPreparationStore {
                 require(result.size<ReceiptRules.MAX_ROWS)
                 val j=JSONObject(secure.openSnapshot(c.getString(0),c.getString(3)))
                 require(j.getString("receiptId")==c.getString(0) && j.getString("documentId")==c.getString(1) && j.getString("eventId")==c.getString(2))
+                LegalDecisionStore.verify(context,db,sql,j)
                 result.add(checkSnapshot(context,db,sql,receipts,j))
             }
         }

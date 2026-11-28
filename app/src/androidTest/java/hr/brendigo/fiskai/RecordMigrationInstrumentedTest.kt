@@ -32,6 +32,7 @@ class RecordMigrationInstrumentedTest {
             // Construct a v4-equivalent schema without the two v5 triggers.
             old.execSQL("DROP TRIGGER demo_receipt_no_replace")
             old.execSQL("DROP TRIGGER stock_event_no_replace")
+            old.execSQL("DROP TABLE legal_decision_ledger")
             old.execSQL("DROP TABLE demo_payment_preparation")
             old.execSQL("DROP TABLE fiscal_outbox")
             old.execSQL("DROP TABLE fiscal_document")
@@ -44,7 +45,7 @@ class RecordMigrationInstrumentedTest {
             db.close()
             db=RecordDatabase(context,name)
             val sql=db.writableDatabase
-            assertEquals(10,sql.version)
+            assertEquals(11,sql.version)
             assertEquals(encrypted,db.read(ns,"drafts"))
             assertEquals("[1]",SecureRecords(context,ns,db).getString("drafts","[]"))
             assertEquals(10000L,Inventory(context,db).balance()[product.id]!!)
@@ -76,11 +77,12 @@ class RecordMigrationInstrumentedTest {
             val cipher=room.receipts().receiptById(receipt.id).payload
             room.close()
             val sql=db.writableDatabase
+            sql.execSQL("DROP TABLE legal_decision_ledger")
             sql.execSQL("DROP TABLE demo_payment_preparation")
             sql.version=8
             db.close()
             db=RecordDatabase(ctx,name)
-            assertEquals(10,db.writableDatabase.version)
+            assertEquals(11,db.writableDatabase.version)
             room=hr.brendigo.fiskai.room.FiscalRoomDatabase.open(ctx,name)
             assertEquals(doc.snapshot,room.queue().document(doc.id).payload)
             assertEquals(cipher,room.receipts().receiptById(receipt.id).payload)
