@@ -49,3 +49,5 @@
 - Novi DEMO payment Room payload sadrži snapshot izvora, intervala i vrste roka; postojeći zapisi ostaju nepromijenjeni.
 
 - Room schema 11: aditivna migracija i zasebni šifrirani DEMO legal decision ledger, uključujući backup/restore i legacy kompatibilnost.
+
+- Objedinjeni računovodstveni pregled razdoblja, usklađenje bankovnih priljeva s potvrdama i CSV sažetak bez osobnih identifikatora.

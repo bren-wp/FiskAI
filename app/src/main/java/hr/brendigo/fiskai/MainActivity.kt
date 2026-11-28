@@ -174,6 +174,7 @@ private fun FiskApp(store: DraftStore, directory: DirectoryStore, businessStore:
                     filtered.reversed().forEach { DraftRow(it) { selected = it } }
                 }
                 page in setOf("Evidencija naplate","Bankovni izvodi","KPR") -> ReceiptScreen(page,business,{backupBusy=it})
+                page == "Računovodstvo" -> AccountingOverviewScreen(business,{backupBusy=it})
                 page == "eRačuni" -> IncomingInvoiceScreen(business,items,{selected=it},{backupBusy=it})
                 page == "Kupci" || page == "Dobavljači" -> ContactScreen(
                     supplier = page == "Dobavljači", contacts = contacts,
@@ -198,7 +199,7 @@ private fun FiskApp(store: DraftStore, directory: DirectoryStore, businessStore:
                 }
                 else -> {
                     Text("Više", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    listOf("Ponude", "Kupci", "Dobavljači", "Proizvodi i usluge", "Poslovni subjekt", "Poslovni prostori", "Naplatni uređaji", "Operateri", "Certifikati", "Test fiskalizacije", "DEMO računi", "POS blagajna", "Skladište", "Platni kodovi", "Evidencija naplate", "Bankovni izvodi", "KPR", "Sigurnosna kopija").forEach { destination ->
+                    listOf("Ponude", "Kupci", "Dobavljači", "Proizvodi i usluge", "Poslovni subjekt", "Poslovni prostori", "Naplatni uređaji", "Operateri", "Certifikati", "Test fiskalizacije", "DEMO računi", "POS blagajna", "Skladište", "Platni kodovi", "Evidencija naplate", "Bankovni izvodi", "KPR", "Računovodstvo", "Sigurnosna kopija").forEach { destination ->
                         OutlinedButton(onClick = { page = destination }, modifier = Modifier.fillMaxWidth()) { Text(destination) }
                     }
                     Panel { Text("Lokalna pohrana"); Text("Lokalni zapisi zaštićeni su ključem ovog uređaja. Fiskalno slanje i povezivanje s informacijskim posrednikom još nisu dostupni.") }

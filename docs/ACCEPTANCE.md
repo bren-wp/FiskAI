@@ -21,3 +21,5 @@ Android remains at app/; public site at web/public; backend, SQL and CLI at serv
 ## Current v0.1.1 development gates
 
 Regulatory history, separate Android ledger and historical restore now have concrete implementations with synthetic regression tests. Operator-pinned archive import, separate witness quorum and NN/Cellar discovery are implemented but require current CI results and independently configured real infrastructure. Android runtime OSV lookup is a release candidate gate; complete build/server dependency inventory, manual security review, dead-code/semantic-clone audits, full legal 2027 review and production acceptance remain open. No original reference PNG or actual web/admin screenshots are fabricated. All 19 phases remain required.
+
+Accounting overview: local authenticated receipt and incoming-invoice projection, explicit period and business scope, exact cents and duplicate bank-link rejection. Excludes rejected invoices from document totals; incoming totals are not paid expenses. Not statutory books, a tax return or legal acceptance. Unit tests cover scope and double counting.
