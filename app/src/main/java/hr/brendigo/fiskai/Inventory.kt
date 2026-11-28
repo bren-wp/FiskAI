@@ -17,11 +17,50 @@ internal object StockQuantity {
 internal data class StockEvent(val id:String,val productId:String,val delta:Long,val after:Long,val created:Long,val label:String,val reason:String)
 internal class Inventory(context:Context,private val db:RecordDatabase=RecordDatabase.shared(context)){
     private val secure=SecureRecords(context,"fiskai_stock",db)
-    fun balance():Map<String,Long> = db.readableDatabase.query("stock_balance",arrayOf("product_id","quantity"),null,null,null,null,null).use{c->
-        buildMap{while(c.moveToNext())put(c.getString(0),c.getLong(1))}
+    data class VerifiedStock(val balances:Map<String,Long>,val recent:List<StockEvent>)
+    private fun verified(sql:android.database.sqlite.SQLiteDatabase):VerifiedStock {
+        val computed=mutableMapOf<String,Long>()
+        val recent=java.util.ArrayDeque<StockEvent>()
+        var count=0
+        sql.rawQuery("SELECT id,product_id,delta,quantity_after,created,payload FROM stock_event ORDER BY rowid ASC",null).use{c->
+            while(c.moveToNext()){
+                require(++count<=20000){"Stock verification capacity exceeded"}
+                val id=c.getString(0);val product=c.getString(1)
+                require(UUID.fromString(id).toString()==id&&UUID.fromString(product).toString()==product)
+                val delta=c.getLong(2);val after=c.getLong(3);val created=c.getLong(4)
+                val value=JSONObject(secure.openSnapshot(id,c.getString(5)))
+                val next=Math.addExact(computed[product]?:0L,delta)
+                require(delta!=0L&&created>0&&next>=0&&next==after)
+                require(value.getString("productId")==product&&value.getLong("delta")==delta)
+                if(value.has("quantityAfter"))require(value.getLong("quantityAfter")==after&&value.getLong("created")==created)
+                computed[product]=next
+                if(recent.size==50)recent.removeFirst()
+                recent.addLast(StockEvent(id,product,delta,after,created,value.getString("product"),value.getString("reason")))
+            }
+        }
+        val balances=mutableMapOf<String,Long>()
+        sql.rawQuery("SELECT product_id,quantity FROM stock_balance",null).use{c->
+            while(c.moveToNext()){
+                require(balances.size<20000)
+                val id=c.getString(0);val quantity=c.getLong(1)
+                require(UUID.fromString(id).toString()==id&&quantity>=0&&balances.put(id,quantity)==null)
+            }
+        }
+        require(computed==balances){"Stock balance mismatch"}
+        return VerifiedStock(computed.toMap(),recent.toList().asReversed())
     }
+    fun verifiedSnapshot():VerifiedStock=SecureRecords.withRecordLock {
+        val sql=db.writableDatabase
+        sql.beginTransaction()
+        try {
+            val result=verified(sql)
+            sql.setTransactionSuccessful()
+            result
+        }finally{sql.endTransaction()}
+    }
+    fun balance():Map<String,Long> = verifiedSnapshot().balances
     fun post(id:String,product:Product,quantity:BigDecimal,incoming:Boolean,reason:String):Long = SecureRecords.withRecordLock {
-        UUID.fromString(id);UUID.fromString(product.id)
+        require(UUID.fromString(id).toString()==id&&UUID.fromString(product.id).toString()==product.id)
         require(!product.service&&!product.archived&&reason.isNotBlank()&&reason.length<=500)
         val amount=StockQuantity.encode(quantity)
         require(amount>0)
@@ -30,6 +69,7 @@ internal class Inventory(context:Context,private val db:RecordDatabase=RecordDat
         val sql=db.writableDatabase
         sql.beginTransaction()
         try{
+            val state=verified(sql)
             sql.query("stock_event",arrayOf("product_id","delta","quantity_after","payload"),"id=?",arrayOf(id),null,null,null).use{c->
                 if(c.moveToFirst()){
                     require(c.getString(0)==product.id&&c.getLong(1)==delta)
@@ -40,7 +80,9 @@ internal class Inventory(context:Context,private val db:RecordDatabase=RecordDat
                     sql.setTransactionSuccessful();return@withRecordLock after
                 }
             }
-            val old=sql.query("stock_balance",arrayOf("quantity"),"product_id=?",arrayOf(product.id),null,null,null).use{if(it.moveToFirst())it.getLong(0) else 0L}
+            val count=sql.rawQuery("SELECT COUNT(*) FROM stock_event",null).use{it.moveToFirst();it.getLong(0)}
+            require(count<20000){"Stock verification capacity exceeded"}
+            val old=state.balances[product.id]?:0L
             val next=Math.addExact(old,delta)
             require(next>=0L){"Insufficient stock"}
             val snapshot=JSONObject().put("product",product.name).put("productId",product.id).put("delta",delta).put("reason",reason.trim()).put("quantityAfter",next).put("created",now)
@@ -52,17 +94,5 @@ internal class Inventory(context:Context,private val db:RecordDatabase=RecordDat
             sql.setTransactionSuccessful();next
         }finally{sql.endTransaction()}
     }
-    fun history():List<StockEvent>{
-        // Copy encrypted payloads out of cursor before obtaining the encryption lock.
-        data class Row(val id:String,val product:String,val delta:Long,val after:Long,val created:Long,val payload:String)
-        val rows=db.readableDatabase.query("stock_event",arrayOf("id","product_id","delta","quantity_after","created","payload"),null,null,null,null,"created DESC","50").use{c->
-            buildList{while(c.moveToNext())add(Row(c.getString(0),c.getString(1),c.getLong(2),c.getLong(3),c.getLong(4),c.getString(5)))}
-        }
-        return rows.map{r->
-            val value=JSONObject(secure.openSnapshot(r.id,r.payload))
-            require(value.getString("productId")==r.product&&value.getLong("delta")==r.delta)
-            if(value.has("quantityAfter"))require(value.getLong("quantityAfter")==r.after && value.getLong("created")==r.created)
-            StockEvent(r.id,r.product,r.delta,r.after,r.created,value.getString("product"),value.getString("reason"))
-        }
-    }
+    fun history():List<StockEvent> = verifiedSnapshot().recent
 }
