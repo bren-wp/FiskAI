@@ -91,4 +91,27 @@ class RecordMigrationInstrumentedTest {
             assertTrue(db.writableDatabase.rawQuery("SELECT 1 FROM demo_payment_preparation",null).use{!it.moveToFirst()})
         } finally {room.close();db.close();ctx.deleteDatabase(name)}
     }
+
+    @Test fun v10ToV11ThroughRoomRetainsEncryptedRecords() {
+        val ctx=InstrumentationRegistry.getInstrumentation().targetContext
+        val name="migration-v10-"+UUID.randomUUID()+".db"
+        val ns="migration_"+UUID.randomUUID()
+        var db=RecordDatabase(ctx,name)
+        try {
+            assertTrue(SecureRecords(ctx,ns,db).write("drafts","[1]"))
+            val cipher=db.read(ns,"drafts")
+            val sql=db.writableDatabase
+            sql.execSQL("DROP TABLE legal_decision_ledger")
+            sql.version=10
+            db.close()
+            val room=hr.brendigo.fiskai.room.FiscalRoomDatabase.open(ctx,name)
+            try {
+                assertEquals(11,room.openHelper.writableDatabase.version)
+                db=RecordDatabase(ctx,name)
+                assertEquals(cipher,db.read(ns,"drafts"))
+                assertEquals("[1]",SecureRecords(ctx,ns,db).getString("drafts","[]"))
+                assertTrue(db.writableDatabase.rawQuery("SELECT 1 FROM legal_decision_ledger",null).use{!it.moveToFirst()})
+            }finally{room.close()}
+        }finally{db.close();ctx.deleteDatabase(name);ctx.getSharedPreferences(ns,0).edit().clear().commit()}
+    }
 }
