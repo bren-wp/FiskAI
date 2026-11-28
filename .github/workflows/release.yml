@@ -87,16 +87,16 @@ jobs:
         with:
           name: FiskAI-real-screenshots-api36
           path: capture/android
+      - uses: actions/download-artifact@v8
+        with:
+          name: FiskAI-real-web-admin
+          path: capture
       - name: Verify and assemble candidate
         run: |
           set -euo pipefail
           (cd dist && sha256sum -c SHA256SUMS.txt)
-          for platform in web admin; do
-            if [ -d "screenshots/actual/$platform" ]; then
-              mkdir -p "capture/$platform"
-              find "screenshots/actual/$platform" -maxdepth 1 -type f -name '*.png' -exec cp -- {} "capture/$platform/" \\;
-            fi
-          done
+          test -s capture/web/01-pocetna.png
+          test -s capture/admin/01-cjenici.png
           (cd capture && zip -qr ../dist/FiskAI-screenshots.zip . -i '*.png')
           (cd dist && unzip -tq FiskAI-screenshots.zip && sha256sum *.apk *.aab *.zip *.md *.json > SHA256SUMS.txt && sha256sum -c SHA256SUMS.txt)
       - uses: actions/upload-artifact@v6

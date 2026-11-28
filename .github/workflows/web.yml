@@ -2,10 +2,10 @@ name: Web
 on:
   workflow_call:
   pull_request:
-    paths: ['web/**','server/**','scripts/regulatory-*.py','scripts/test-regulatory-*.py','app/src/androidTest/assets/regulatory-vector.json','scripts/test-demo-sync-https.py','scripts/educ-witness.py','scripts/test-educ-witness.py','scripts/educ-witness-https.py','scripts/test-educ-witness-https.py','scripts/verify-f2-bundle.py','scripts/test-f2-bundle.py','.github/workflows/web.yml','scripts/check-legal-catalog.py','app/src/main/java/hr/brendigo/fiskai/LegalRuleCatalog.kt']
+    paths: ['web/**','server/**','scripts/regulatory-*.py','scripts/test-regulatory-*.py','app/src/androidTest/assets/regulatory-vector.json','scripts/capture-web-admin.py','scripts/test-demo-sync-https.py','scripts/educ-witness.py','scripts/test-educ-witness.py','scripts/educ-witness-https.py','scripts/test-educ-witness-https.py','scripts/verify-f2-bundle.py','scripts/test-f2-bundle.py','.github/workflows/web.yml','scripts/check-legal-catalog.py','app/src/main/java/hr/brendigo/fiskai/LegalRuleCatalog.kt']
   push:
     branches: [main, feature/native-alpha]
-    paths: ['web/**','server/**','scripts/regulatory-*.py','scripts/test-regulatory-*.py','app/src/androidTest/assets/regulatory-vector.json','scripts/test-demo-sync-https.py','scripts/educ-witness.py','scripts/test-educ-witness.py','scripts/educ-witness-https.py','scripts/test-educ-witness-https.py','scripts/verify-f2-bundle.py','scripts/test-f2-bundle.py','.github/workflows/web.yml']
+    paths: ['web/**','server/**','scripts/regulatory-*.py','scripts/test-regulatory-*.py','app/src/androidTest/assets/regulatory-vector.json','scripts/capture-web-admin.py','scripts/test-demo-sync-https.py','scripts/educ-witness.py','scripts/test-educ-witness.py','scripts/educ-witness-https.py','scripts/test-educ-witness-https.py','scripts/verify-f2-bundle.py','scripts/test-f2-bundle.py','.github/workflows/web.yml']
 permissions:
   contents: read
 jobs:
@@ -91,3 +91,14 @@ jobs:
           if xmlsec1 --verify --trusted-pem "$dir/cert.pem" --pubkey-cert-pem "$dir/cert.pem" --id-attr:Id RacunZahtjev "$dir/tampered.xml"; then
             echo "Modified XML unexpectedly verified"; exit 1
           fi
+      - name: Capture actual web and administration in Chromium
+        if: matrix.database == 'mysql:8.4'
+        run: python3 scripts/capture-web-admin.py
+      - uses: actions/upload-artifact@v6
+        if: matrix.database == 'mysql:8.4' && success()
+        with:
+          name: FiskAI-real-web-admin
+          path: |
+            screenshots/actual/web/*.png
+            screenshots/actual/admin/*.png
+          if-no-files-found: error
