@@ -46,13 +46,16 @@ internal object PaymentPreparationStore {
         }
         val deadline=FiscalReportingRules.deadline(FiscalReportingRules.Event.PAYMENT,receipt.date)
         require(deadline.kind==FiscalReportingRules.DeadlineKind.MONTHLY_STATUTORY_DATE)
-        val rule= requireNotNull(LegalRuleCatalog.rules[LegalCompliance.validateDate(receipt.date)])
+        val rule= requireNotNull(LegalRuleCatalog.resolve(receipt.date))
         val receiptDigest=FiscalCutover.digest(ReceiptRules.receiptJson(receipt).toString())
         return Checked(JSONObject().put("eventId",event).put("environment","DEMO").put("kind","DEMO_PAYMENT_PREPARATION")
             .put("receiptId",receipt.id).put("documentId",document).put("documentDigest",digest)
             .put("receiptDigest",receiptDigest).put("evidenceSha256",FiscalCutover.digest("DEMO_PAYMENT_V1\u0000"+digest+"\u0000"+receiptDigest))
             .put("eventDate",receipt.date).put("amountCents",receipt.cents).put("ruleVersion",rule.version)
-            .put("deadlineDate",requireNotNull(deadline.date)),total)
+            .put("deadlineDate",requireNotNull(deadline.date))
+            .put("legalDecisionFormat",1).put("ruleFrom",rule.from).put("ruleUntil",rule.until)
+            .put("legalSource","https://narodne-novine.nn.hr/clanci/sluzbeni/2025_06_89_1233.html")
+            .put("deadlineKind",deadline.kind.name),total)
     }
     private fun same(actual:JSONObject,expected:JSONObject):Boolean =
         actual.keys().asSequence().toSet()==expected.keys().asSequence().toSet() &&
@@ -63,6 +66,10 @@ internal object PaymentPreparationStore {
         }
     private fun checkSnapshot(context:Context,db:RecordDatabase,sql:SQLiteDatabase,rows:Map<String,ReceiptEvidence>,j:JSONObject):Checked {
         val expected=snapshot(context,db,sql,requireNotNull(rows[j.getString("receiptId")]),j.getString("documentId"),j.getString("eventId"))
+        if (!j.has("legalDecisionFormat")) {
+            // Legacy evidence is not retroactively supplemented.
+            for (key in listOf("legalDecisionFormat","ruleFrom","ruleUntil","legalSource","deadlineKind")) expected.json.remove(key)
+        }
         require(same(j,expected.json))
         return expected
     }
